@@ -68,23 +68,26 @@ class Well_Known_Handler {
 	/**
 	 * Builds the C2PA well-known discovery document.
 	 *
+	 * Uses spec-compliant field names per C2PA 2.3.
+	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated to use C2PA spec-compliant field names.
 	 *
 	 * @return array<string, mixed> The discovery document.
 	 */
 	public static function build_document(): array {
 		return array(
-			'@context'     => 'https://c2pa.org/schemas/c2pa-well-known/v1',
-			'publisher'    => get_bloginfo( 'name' ),
-			'url'          => home_url(),
-			'signing'      => array(
-				'active' => true,
-				'spec'   => 'C2PA 2.3 Section A.7',
+			'c2pa_version'  => '2.3',
+			'publisher'     => get_bloginfo( 'name' ),
+			'url'           => home_url(),
+			'signing'       => array(
+				'active'    => true,
+				'algorithm' => 'ES256',
 			),
-			'verify'       => array(
+			'trust_anchors' => array(),
+			'verify'        => array(
 				'endpoint' => rest_url( 'c2pa-provenance/v1/verify' ),
 			),
-			'generated_at' => gmdate( 'c' ),
 		);
 	}
 }

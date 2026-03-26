@@ -11,6 +11,7 @@ namespace WordPress\AI\Tests\Integration\Abilities;
 
 use WP_UnitTestCase;
 use WordPress\AI\Abilities\Content_Provenance\C2PA_Sign;
+use WordPress\AI\Experiments\Content_Provenance\Signing\Local_Signer;
 
 /**
  * C2PA_Sign ability test case.
@@ -62,27 +63,16 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	 * Test that execute_callback signs valid text and returns expected keys.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated for EC P-256 keypair format.
 	 */
 	public function test_sign_valid_text_returns_signed_text(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $user_id );
 
-		// Pre-store a keypair so the fallback local signer works.
-		$res = openssl_pkey_new(
-			array(
-				'private_key_bits' => 1024,
-				'private_key_type' => OPENSSL_KEYTYPE_RSA,
-			)
-		);
-		openssl_pkey_export( $res, $private_key );
-		$details = openssl_pkey_get_details( $res );
-		update_option(
-			'_c2pa_local_keypair',
-			array(
-				'private_key' => $private_key,
-				'public_key'  => $details['key'],
-			)
-		);
+		// Pre-store an EC P-256 keypair so the fallback local signer works.
+		$keypair = Local_Signer::generate_keypair();
+		$this->assertIsArray( $keypair );
+		update_option( '_c2pa_local_keypair', $keypair );
 
 		$ability = new C2PA_Sign();
 		$ref     = new \ReflectionMethod( $ability, 'execute_callback' );
@@ -178,27 +168,16 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	 * when get_experiment() returns a non-null Content_Provenance instance.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated for EC P-256 keypair format.
 	 */
 	public function test_sign_uses_experiment_signer_when_filter_provides_experiment(): void {
 		$user_id = $this->factory->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $user_id );
 
-		// Pre-store a keypair so the experiment's local signer works.
-		$res = openssl_pkey_new(
-			array(
-				'private_key_bits' => 1024,
-				'private_key_type' => OPENSSL_KEYTYPE_RSA,
-			)
-		);
-		openssl_pkey_export( $res, $private_key );
-		$details = openssl_pkey_get_details( $res );
-		update_option(
-			'_c2pa_local_keypair',
-			array(
-				'private_key' => $private_key,
-				'public_key'  => $details['key'],
-			)
-		);
+		// Pre-store an EC P-256 keypair so the experiment's local signer works.
+		$keypair = Local_Signer::generate_keypair();
+		$this->assertIsArray( $keypair );
+		update_option( '_c2pa_local_keypair', $keypair );
 
 		$experiment = new \WordPress\AI\Experiments\Content_Provenance\Content_Provenance();
 
@@ -238,11 +217,11 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 			/**
 			 * Always fail.
 			 *
-			 * @param string              $content Content.
-			 * @param array<string,mixed> $claims  Claims.
+			 * @param string              $content  Content.
+			 * @param array<string,mixed> $metadata Metadata.
 			 * @return \WP_Error
 			 */
-			public function sign( string $content, array $claims ) {
+			public function sign( string $content, array $metadata ) {
 				return new \WP_Error( 'signer_error', 'Signing failed.' );
 			}
 

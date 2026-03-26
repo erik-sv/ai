@@ -19,20 +19,24 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Each signing tier (local, connected, BYOK) must implement this interface so
  * the experiment can swap backends without changing calling code.
  *
+ * Signers return a JUMBF manifest store (binary bytes) containing a
+ * COSE_Sign1-signed C2PA claim. The output is ready for Unicode embedding.
+ *
  * @since 0.5.0
  */
 interface Signing_Interface {
 
 	/**
-	 * Sign content and return the C2PA manifest as a JSON string.
+	 * Sign content and return the C2PA JUMBF manifest store bytes.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Returns JUMBF manifest store bytes instead of JSON.
 	 *
-	 * @param string               $content Plain text content to sign.
-	 * @param array<string,mixed>  $claims  C2PA claims/assertions to embed.
-	 * @return string|\WP_Error JSON manifest string or WP_Error on failure.
+	 * @param string               $content  Plain text content to sign.
+	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).
+	 * @return string|\WP_Error JUMBF manifest store bytes or WP_Error on failure.
 	 */
-	public function sign( string $content, array $claims );
+	public function sign( string $content, array $metadata );
 
 	/**
 	 * Returns the trust tier label for this signer.

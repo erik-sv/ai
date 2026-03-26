@@ -119,13 +119,22 @@ class Content_Provenance extends Abstract_Feature {
 			$this->get_field_option_name( 'connected_service_url' ),
 			array(
 				'sanitize_callback' => 'esc_url_raw',
-				'default'           => '',
+				'default'           => Connected_Signer::DEFAULT_SERVICE_URL,
 			)
 		);
 
 		register_setting(
 			'ai_experiments',
 			$this->get_field_option_name( 'connected_service_api_key' ),
+			array(
+				'sanitize_callback' => 'sanitize_text_field',
+				'default'           => '',
+			)
+		);
+
+		register_setting(
+			'ai_experiments',
+			$this->get_field_option_name( 'byok_key_path' ),
 			array(
 				'sanitize_callback' => 'sanitize_text_field',
 				'default'           => '',
@@ -180,21 +189,24 @@ class Content_Provenance extends Abstract_Feature {
 	public function render_settings_fields(): void {
 		$signing_tier_raw          = $this->get_signing_option( 'signing_tier' );
 		$signing_tier              = $signing_tier_raw ? (string) $signing_tier_raw : 'local';
-		$connected_service_url     = (string) $this->get_signing_option( 'connected_service_url' );
+		$connected_service_url_raw = $this->get_signing_option( 'connected_service_url' );
+		$connected_service_url     = $connected_service_url_raw ? (string) $connected_service_url_raw : Connected_Signer::DEFAULT_SERVICE_URL;
 		$connected_service_api_key = (string) $this->get_signing_option( 'connected_service_api_key' );
+		$byok_key_path             = (string) $this->get_signing_option( 'byok_key_path' );
 		$byok_certificate          = (string) $this->get_signing_option( 'byok_certificate' );
 		$auto_sign                 = (bool) $this->get_signing_option( 'auto_sign' );
 		$show_badge                = (bool) $this->get_signing_option( 'show_badge' );
 		$badge_position_raw        = (string) $this->get_signing_option( 'badge_position' );
 		$badge_position            = $badge_position_raw ? $badge_position_raw : 'below';
 
-		$tier_name_signing     = $this->get_field_option_name( 'signing_tier' );
-		$tier_name_service_url = $this->get_field_option_name( 'connected_service_url' );
-		$tier_name_api_key     = $this->get_field_option_name( 'connected_service_api_key' );
-		$tier_name_byok_cert   = $this->get_field_option_name( 'byok_certificate' );
-		$tier_name_auto_sign   = $this->get_field_option_name( 'auto_sign' );
-		$tier_name_show_badge  = $this->get_field_option_name( 'show_badge' );
-		$tier_name_badge_pos   = $this->get_field_option_name( 'badge_position' );
+		$tier_name_signing       = $this->get_field_option_name( 'signing_tier' );
+		$tier_name_service_url   = $this->get_field_option_name( 'connected_service_url' );
+		$tier_name_api_key       = $this->get_field_option_name( 'connected_service_api_key' );
+		$tier_name_byok_key_path = $this->get_field_option_name( 'byok_key_path' );
+		$tier_name_byok_cert     = $this->get_field_option_name( 'byok_certificate' );
+		$tier_name_auto_sign     = $this->get_field_option_name( 'auto_sign' );
+		$tier_name_show_badge    = $this->get_field_option_name( 'show_badge' );
+		$tier_name_badge_pos     = $this->get_field_option_name( 'badge_position' );
 		?>
 		<fieldset class="ai-experiment-content-provenance-settings">
 			<legend class="screen-reader-text">
@@ -225,13 +237,13 @@ class Content_Provenance extends Abstract_Feature {
 								name="<?php echo esc_attr( $tier_name_signing ); ?>"
 							>
 								<option value="local" <?php selected( $signing_tier, 'local' ); ?>>
-									<?php esc_html_e( 'Local (self-signed, no external service)', 'ai' ); ?>
+									<?php esc_html_e( 'Local — self-signed, zero config', 'ai' ); ?>
 								</option>
 								<option value="connected" <?php selected( $signing_tier, 'connected' ); ?>>
-									<?php esc_html_e( 'Connected (external signing service)', 'ai' ); ?>
+									<?php esc_html_e( 'Connected — CA-verified via Encypher', 'ai' ); ?>
 								</option>
 								<option value="byok" <?php selected( $signing_tier, 'byok' ); ?>>
-									<?php esc_html_e( 'BYOK (Bring Your Own Key)', 'ai' ); ?>
+									<?php esc_html_e( 'BYOK — your own CA-issued certificate', 'ai' ); ?>
 								</option>
 							</select>
 						</td>
@@ -242,7 +254,7 @@ class Content_Provenance extends Abstract_Feature {
 			<details <?php echo 'connected' === $signing_tier ? 'open' : ''; ?>>
 				<summary><?php esc_html_e( 'Connected Service Configuration', 'ai' ); ?></summary>
 				<p class="description">
-					<?php esc_html_e( 'Configure the external signing service endpoint and credentials. Only required when the Connected signing tier is selected above.', 'ai' ); ?>
+					<?php esc_html_e( 'Connected signing uses a CA-verified certificate from the Encypher signing service. Manifests are trusted by standard C2PA verifiers like Content Credentials.', 'ai' ); ?>
 				</p>
 
 				<table class="form-table" role="presentation">
@@ -259,8 +271,10 @@ class Content_Provenance extends Abstract_Feature {
 								name="<?php echo esc_attr( $tier_name_service_url ); ?>"
 								value="<?php echo esc_attr( $connected_service_url ); ?>"
 								class="regular-text"
-								placeholder="https://signing.example.com/sign"
 							/>
+							<p class="description">
+								<?php esc_html_e( 'Pre-configured for Encypher. Change only if using a custom signing service.', 'ai' ); ?>
+							</p>
 						</td>
 					</tr>
 					<tr>
@@ -278,6 +292,15 @@ class Content_Provenance extends Abstract_Feature {
 								class="regular-text"
 								autocomplete="new-password"
 							/>
+							<p class="description">
+								<?php
+								printf(
+									/* translators: %s: URL to the Encypher signup page. */
+									esc_html__( 'Get your free API key at %s', 'ai' ),
+									'<a href="https://encypher.com/signup" target="_blank" rel="noopener noreferrer">encypher.com/signup</a>'
+								);
+								?>
+							</p>
 						</td>
 					</tr>
 				</table>
@@ -286,14 +309,34 @@ class Content_Provenance extends Abstract_Feature {
 			<details <?php echo 'byok' === $signing_tier ? 'open' : ''; ?>>
 				<summary><?php esc_html_e( 'BYOK Certificate Configuration', 'ai' ); ?></summary>
 				<p class="description">
-					<?php esc_html_e( 'Provide the filesystem path to your PEM-encoded private key. The key must be readable by the web server process. Only required when the BYOK tier is selected.', 'ai' ); ?>
+					<?php esc_html_e( 'Supply your own CA-issued EC P-256 private key and X.509 certificate for the highest trust level. The certificate should be issued by a C2PA trust list CA (SSL.com, DigiCert, etc.).', 'ai' ); ?>
 				</p>
 
 				<table class="form-table" role="presentation">
 					<tr>
 						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_byok_cert ); ?>">
+							<label for="<?php echo esc_attr( $tier_name_byok_key_path ); ?>">
 								<?php esc_html_e( 'Private Key Path', 'ai' ); ?>
+							</label>
+						</th>
+						<td>
+							<input
+								type="text"
+								id="<?php echo esc_attr( $tier_name_byok_key_path ); ?>"
+								name="<?php echo esc_attr( $tier_name_byok_key_path ); ?>"
+								value="<?php echo esc_attr( $byok_key_path ); ?>"
+								class="large-text"
+								placeholder="/etc/ssl/private/c2pa-signing-key.pem"
+							/>
+							<p class="description">
+								<?php esc_html_e( 'Filesystem path to PEM-encoded EC P-256 private key. Must be readable by the web server.', 'ai' ); ?>
+							</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="<?php echo esc_attr( $tier_name_byok_cert ); ?>">
+								<?php esc_html_e( 'Certificate Path', 'ai' ); ?>
 							</label>
 						</th>
 						<td>
@@ -303,8 +346,11 @@ class Content_Provenance extends Abstract_Feature {
 								name="<?php echo esc_attr( $tier_name_byok_cert ); ?>"
 								value="<?php echo esc_attr( $byok_certificate ); ?>"
 								class="large-text"
-								placeholder="/etc/ssl/private/my-signing-key.pem"
+								placeholder="/etc/ssl/certs/c2pa-signing-cert.pem"
 							/>
+							<p class="description">
+								<?php esc_html_e( 'Filesystem path to PEM-encoded X.509 certificate (or chain).', 'ai' ); ?>
+							</p>
 						</td>
 					</tr>
 				</table>
@@ -504,7 +550,8 @@ class Content_Provenance extends Abstract_Feature {
 			return false;
 		}
 
-		update_post_meta( $post_id, '_c2pa_manifest', $result['manifest'] );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Binary JUMBF data must be base64-encoded for safe storage in WordPress post meta.
+		update_post_meta( $post_id, '_c2pa_manifest', base64_encode( $result['manifest'] ) );
 		update_post_meta( $post_id, '_c2pa_status', 'signed' );
 		update_post_meta( $post_id, '_c2pa_signed_at', gmdate( 'c' ) );
 		update_post_meta( $post_id, '_c2pa_signer_tier', $signer->get_tier() );
@@ -646,17 +693,13 @@ class Content_Provenance extends Abstract_Feature {
 		$raw_mfst   = get_post_meta( $post_id, '_c2pa_manifest', true );
 		$manifest   = $raw_mfst ? (string) $raw_mfst : null;
 
-		// Provide a truncated preview rather than the full manifest.
+		// Provide a summary rather than the full binary manifest.
 		$manifest_preview = null;
 		if ( $manifest ) {
-			$decoded = json_decode( $manifest, true );
-			if ( is_array( $decoded ) ) {
-				$manifest_preview = array(
-					'magic'   => $decoded['magic'] ?? null,
-					'version' => $decoded['version'] ?? null,
-					'signer'  => $decoded['signer'] ?? null,
-				);
-			}
+			$manifest_preview = array(
+				'format' => 'jumbf',
+				'size'   => strlen( $manifest ),
+			);
 		}
 
 		return new \WP_REST_Response(
@@ -696,10 +739,11 @@ class Content_Provenance extends Abstract_Feature {
 			'content_provenance',
 			'ContentProvenanceData',
 			array(
-				'enabled'    => $this->is_enabled(),
-				'nonce'      => wp_create_nonce( 'wp_rest' ),
-				'restUrl'    => rest_url( 'c2pa-provenance/v1' ),
-				'signerTier' => ( $this->get_signing_option( 'signing_tier' ) ? (string) $this->get_signing_option( 'signing_tier' ) : 'local' ),
+				'enabled'     => $this->is_enabled(),
+				'nonce'       => wp_create_nonce( 'wp_rest' ),
+				'restUrl'     => rest_url( 'c2pa-provenance/v1' ),
+				'signerTier'  => ( $this->get_signing_option( 'signing_tier' ) ? (string) $this->get_signing_option( 'signing_tier' ) : 'local' ),
+				'settingsUrl' => admin_url( 'admin.php?page=ai-experiments' ),
 			)
 		);
 	}
@@ -707,56 +751,25 @@ class Content_Provenance extends Abstract_Feature {
 	/**
 	 * Registers the /.well-known/c2pa rewrite rule.
 	 *
-	 * Adds a custom rewrite rule that maps the well-known URI to a custom
-	 * query var so handle_well_known_request() can intercept and serve it.
+	 * Delegates to Well_Known_Handler for rewrite registration.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Delegates to Well_Known_Handler.
 	 */
 	public function add_well_known_rewrite(): void {
-		add_rewrite_rule(
-			'^\.well-known/c2pa/?$',
-			'index.php?c2pa_well_known=1',
-			'top'
-		);
-
-		add_filter(
-			'query_vars',
-			static function ( array $vars ): array {
-				$vars[] = 'c2pa_well_known';
-				return $vars;
-			}
-		);
+		Well_Known_Handler::add_rewrite_rule();
 	}
 
 	/**
 	 * Serves the /.well-known/c2pa discovery document when requested.
 	 *
-	 * Outputs a JSON manifest discovery document that identifies this site as
-	 * a C2PA-capable content origin and provides the verification endpoint URL.
+	 * Delegates to Well_Known_Handler for spec-compliant C2PA discovery.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Delegates to Well_Known_Handler with spec-compliant field names.
 	 */
 	public function handle_well_known_request(): void {
-		if ( ! get_query_var( 'c2pa_well_known' ) ) {
-			return;
-		}
-
-		$document = array(
-			'@context'        => 'https://c2pa.org/well-known/v1',
-			'verify_url'      => rest_url( 'c2pa-provenance/v1/verify' ),
-			'site_url'        => home_url(),
-			'site_name'       => get_bloginfo( 'name' ),
-			'generator'       => 'WordPress/AI Content Provenance Experiment',
-			'supported_tiers' => array( 'local', 'connected', 'byok' ),
-			'active_tier'     => ( $this->get_signing_option( 'signing_tier' ) ? (string) $this->get_signing_option( 'signing_tier' ) : 'local' ),
-		);
-
-		header( 'Content-Type: application/json; charset=utf-8' );
-		header( 'Cache-Control: public, max-age=3600' );
-
-		echo wp_json_encode( $document, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
-
-		exit;
+		Well_Known_Handler::maybe_handle();
 	}
 
 	/**
@@ -781,15 +794,16 @@ class Content_Provenance extends Abstract_Feature {
 	 * Generates and persists the local keypair if one does not already exist.
 	 *
 	 * Stores the keypair as a site option so it persists across requests.
-	 * Uses 2048-bit RSA which balances key size with broad PHP environment
-	 * compatibility. Called once on experiment activation.
+	 * Uses EC P-256 with a self-signed X.509 certificate for C2PA compliance.
+	 * Called once on experiment activation.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Switched from RSA-2048 to EC P-256.
 	 */
 	public function ensure_local_keypair(): void {
 		$existing = get_option( '_c2pa_local_keypair' );
 
-		if ( is_array( $existing ) && ! empty( $existing['private_key'] ) ) {
+		if ( is_array( $existing ) && ! empty( $existing['private_key'] ) && ! empty( $existing['certificate_pem'] ) ) {
 			return;
 		}
 
@@ -836,6 +850,7 @@ class Content_Provenance extends Abstract_Feature {
 
 		if ( 'byok' === $tier ) {
 			return new BYOK_Signer(
+				(string) $this->get_signing_option( 'byok_key_path' ),
 				(string) $this->get_signing_option( 'byok_certificate' )
 			);
 		}
@@ -859,21 +874,22 @@ class Content_Provenance extends Abstract_Feature {
 	}
 
 	/**
-	 * Retrieves or generates the local RSA keypair.
+	 * Retrieves or generates the local EC P-256 keypair.
 	 *
 	 * Reads the persisted keypair from the '_c2pa_local_keypair' site option.
-	 * If none exists (e.g. the option was deleted after activation), generates
-	 * a new one on the fly and persists it.
+	 * If none exists or the stored keypair uses the legacy RSA format (missing
+	 * certificate_pem), generates a new EC P-256 keypair and persists it.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Returns EC P-256 keypair with certificate instead of RSA.
 	 *
-	 * @return array{private_key: string, public_key: string}
+	 * @return array{private_key: string, certificate_pem: string}
 	 */
 	private function get_local_keypair(): array {
 		$stored = get_option( '_c2pa_local_keypair' );
 
-		if ( is_array( $stored ) && ! empty( $stored['private_key'] ) ) {
-			/** @var array{private_key: string, public_key: string} $stored */
+		if ( is_array( $stored ) && ! empty( $stored['private_key'] ) && ! empty( $stored['certificate_pem'] ) ) {
+			/** @var array{private_key: string, certificate_pem: string} $stored */
 			return $stored;
 		}
 
@@ -882,8 +898,8 @@ class Content_Provenance extends Abstract_Feature {
 		if ( is_wp_error( $keypair ) ) {
 			// Return a placeholder — signing will fail gracefully downstream.
 			return array(
-				'private_key' => '',
-				'public_key'  => '',
+				'private_key'     => '',
+				'certificate_pem' => '',
 			);
 		}
 
@@ -893,43 +909,14 @@ class Content_Provenance extends Abstract_Feature {
 	}
 
 	/**
-	 * Generates a fresh RSA-2048 keypair using the PHP OpenSSL extension.
+	 * Generates a fresh EC P-256 keypair with self-signed X.509 certificate.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Switched from RSA-2048 to EC P-256 with X.509 certificate for C2PA compliance.
 	 *
-	 * @return array{private_key: string, public_key: string}|\WP_Error Keypair array or WP_Error on failure.
+	 * @return array{private_key: string, certificate_pem: string}|\WP_Error Keypair array or WP_Error on failure.
 	 */
 	private function generate_keypair() {
-		$resource = openssl_pkey_new(
-			array(
-				'private_key_bits' => 2048,
-				'private_key_type' => OPENSSL_KEYTYPE_RSA,
-			)
-		);
-
-		if ( false === $resource ) {
-			return new \WP_Error(
-				'c2pa_keypair_gen_failed',
-				esc_html__( 'Failed to generate RSA keypair via OpenSSL. Ensure the OpenSSL PHP extension is available.', 'ai' )
-			);
-		}
-
-		$private_key_pem = '';
-		openssl_pkey_export( $resource, $private_key_pem );
-
-		$key_details = openssl_pkey_get_details( $resource );
-		$public_key  = is_array( $key_details ) ? ( $key_details['key'] ?? '' ) : '';
-
-		if ( empty( $private_key_pem ) || empty( $public_key ) ) {
-			return new \WP_Error(
-				'c2pa_keypair_export_failed',
-				esc_html__( 'Failed to export RSA keypair from OpenSSL.', 'ai' )
-			);
-		}
-
-		return array(
-			'private_key' => $private_key_pem,
-			'public_key'  => $public_key,
-		);
+		return Local_Signer::generate_keypair();
 	}
 }

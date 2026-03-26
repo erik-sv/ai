@@ -58,41 +58,43 @@ class Well_Known_HandlerTest extends WP_UnitTestCase {
 	 * Test that build_document returns a valid discovery document structure.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated for C2PA spec-compliant field names.
 	 */
 	public function test_build_document_returns_valid_structure(): void {
 		$document = Well_Known_Handler::build_document();
 
 		$this->assertIsArray( $document );
-		$this->assertArrayHasKey( '@context', $document );
+		$this->assertArrayHasKey( 'c2pa_version', $document );
 		$this->assertArrayHasKey( 'publisher', $document );
 		$this->assertArrayHasKey( 'url', $document );
 		$this->assertArrayHasKey( 'signing', $document );
 		$this->assertArrayHasKey( 'verify', $document );
-		$this->assertArrayHasKey( 'generated_at', $document );
+		$this->assertArrayHasKey( 'trust_anchors', $document );
 	}
 
 	/**
-	 * Test that build_document includes the correct context URI.
+	 * Test that build_document includes the C2PA version.
 	 *
-	 * @since 0.5.0
+	 * @since 0.7.0
 	 */
-	public function test_build_document_context_uri(): void {
+	public function test_build_document_c2pa_version(): void {
 		$document = Well_Known_Handler::build_document();
 
-		$this->assertSame( 'https://c2pa.org/schemas/c2pa-well-known/v1', $document['@context'] );
+		$this->assertSame( '2.3', $document['c2pa_version'] );
 	}
 
 	/**
-	 * Test that build_document includes signing metadata.
+	 * Test that build_document includes signing metadata with ES256 algorithm.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated for ES256 algorithm field.
 	 */
 	public function test_build_document_signing_metadata(): void {
 		$document = Well_Known_Handler::build_document();
 
 		$this->assertIsArray( $document['signing'] );
 		$this->assertTrue( $document['signing']['active'] );
-		$this->assertSame( 'C2PA 2.3 Section A.7', $document['signing']['spec'] );
+		$this->assertSame( 'ES256', $document['signing']['algorithm'] );
 	}
 
 	/**
@@ -130,14 +132,13 @@ class Well_Known_HandlerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that build_document generated_at is a valid ISO 8601 date.
+	 * Test that build_document includes trust_anchors as an array.
 	 *
-	 * @since 0.5.0
+	 * @since 0.7.0
 	 */
-	public function test_build_document_generated_at_is_iso8601(): void {
+	public function test_build_document_trust_anchors(): void {
 		$document = Well_Known_Handler::build_document();
 
-		$parsed = \DateTime::createFromFormat( \DateTime::ATOM, $document['generated_at'] );
-		$this->assertNotFalse( $parsed, 'generated_at should be a valid ISO 8601 date.' );
+		$this->assertIsArray( $document['trust_anchors'] );
 	}
 }

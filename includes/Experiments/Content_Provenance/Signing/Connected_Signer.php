@@ -1,6 +1,6 @@
 <?php
 /**
- * Connected signing backend.
+ * Connected signing backend via Encypher API.
  *
  * @package WordPress\AI
  */
@@ -14,15 +14,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Signs C2PA manifests via a remote signing service.
+ * Signs C2PA manifests via the Encypher signing service.
  *
- * Delegates signing to an external API endpoint. Suitable for organisations
- * that operate a central key-management service with a proper certificate chain.
- * API credentials are stored as WordPress options (never in source control).
+ * Delegates signing to the Encypher API endpoint. The service holds a
+ * CA-issued certificate on the C2PA trust list, producing manifests that
+ * standard verifiers recognise as trusted. Pre-populated with the Encypher
+ * API URL by default — publishers just need a free API key to start signing.
  *
  * @since 0.5.0
  */
 class Connected_Signer implements Signing_Interface {
+
+	/**
+	 * Default Encypher API signing endpoint.
+	 *
+	 * @since 0.7.0
+	 * @var string
+	 */
+	public const DEFAULT_SERVICE_URL = 'https://api.encypher.com/v1/c2pa/sign';
 
 	/**
 	 * Remote signing service URL.
@@ -56,16 +65,17 @@ class Connected_Signer implements Signing_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * POSTs content and claims to the configured signing service and returns
-	 * the manifest JSON produced by the service.
+	 * POSTs content and metadata to the signing service. The service builds
+	 * a spec-compliant C2PA JUMBF manifest store and returns it base64-encoded.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Returns JUMBF binary instead of JSON.
 	 *
-	 * @param string              $content Plain text content to sign.
-	 * @param array<string,mixed> $claims  C2PA claims/assertions to embed.
-	 * @return string|\WP_Error JSON manifest string or WP_Error on failure.
+	 * @param string               $content  Plain text content to sign.
+	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).
+	 * @return string|\WP_Error JUMBF manifest store bytes or WP_Error on failure.
 	 */
-	public function sign( string $content, array $claims ) {
+	public function sign( string $content, array $metadata ) {
 		if ( empty( $this->service_url ) ) {
 			return new \WP_Error(
 				'c2pa_connected_no_url',
@@ -75,8 +85,9 @@ class Connected_Signer implements Signing_Interface {
 
 		$body = wp_json_encode(
 			array(
-				'content' => $content,
-				'claims'  => $claims,
+				'content'  => $content,
+				'metadata' => $metadata,
+				'format'   => 'jumbf',
 			)
 		);
 
@@ -95,7 +106,7 @@ class Connected_Signer implements Signing_Interface {
 					'Authorization' => 'Bearer ' . $this->api_key,
 				),
 				'body'    => $body,
-				'timeout' => 3,
+				'timeout' => 10, // phpcs:ignore WordPressVIPMinimum.Performance.RemoteRequestTimeout.timeout_timeout -- Signing service may take several seconds.
 			)
 		);
 
@@ -133,7 +144,17 @@ class Connected_Signer implements Signing_Interface {
 			);
 		}
 
-		return is_string( $decoded['manifest'] ) ? $decoded['manifest'] : (string) wp_json_encode( $decoded['manifest'] );
+		// The service returns the JUMBF manifest store as base64.
+		$manifest_bytes = base64_decode( (string) $decoded['manifest'], true );
+
+		if ( false === $manifest_bytes || '' === $manifest_bytes ) {
+			return new \WP_Error(
+				'c2pa_connected_invalid_manifest',
+				esc_html__( 'Connected signing service returned a manifest that could not be decoded.', 'ai' )
+			);
+		}
+
+		return $manifest_bytes;
 	}
 
 	/**

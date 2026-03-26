@@ -67,19 +67,20 @@ class Unicode_Embedder {
 	private const HEADER_SIZE = 13;
 
 	/**
-	 * Embed a JSON string into text using a C2PA-compliant Unicode wrapper.
+	 * Embed manifest bytes into text using a C2PA-compliant Unicode wrapper.
 	 *
 	 * Normalizes the text to NFC, builds a binary C2PATextManifestWrapper containing
 	 * the magic header and manifest bytes, encodes the wrapper as Unicode variation
 	 * selectors (prefixed with U+FEFF), and APPENDS it to the normalized text.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Renamed parameter from $manifest_json to $manifest_bytes (accepts any binary payload).
 	 *
-	 * @param string $text          Plain text content.
-	 * @param string $manifest_json JSON string to embed.
+	 * @param string $text           Plain text content.
+	 * @param string $manifest_bytes Manifest bytes to embed (JUMBF binary or legacy JSON).
 	 * @return string NFC-normalized text with the encoded wrapper appended.
 	 */
-	public static function embed( string $text, string $manifest_json ): string {
+	public static function embed( string $text, string $manifest_bytes ): string {
 		// NFC normalize text per C2PA 2.3 §A.7.
 		if ( class_exists( 'Normalizer' ) ) {
 			$normalized = \Normalizer::normalize( $text, \Normalizer::FORM_C );
@@ -88,7 +89,7 @@ class Unicode_Embedder {
 			}
 		}
 
-		$unpacked       = unpack( 'C*', $manifest_json );
+		$unpacked       = unpack( 'C*', $manifest_bytes );
 		$manifest_bytes = array_values( $unpacked ? $unpacked : array() );
 		$manifest_len   = count( $manifest_bytes );
 

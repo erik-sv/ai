@@ -66,6 +66,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * Test that execute_callback returns 'verified' for properly signed text.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated for EC P-256 keypair and JUMBF binary manifest.
 	 */
 	public function test_execute_callback_returns_verified_for_signed_text(): void {
 		$keypair = $this->generate_test_keypair();
@@ -147,7 +148,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 *
 	 * @param \WordPress\AI\Abilities\Content_Provenance\C2PA_Verify $ability The ability instance.
-	 * @param mixed       $input   Input to pass.
+	 * @param mixed                                                   $input   Input to pass.
 	 * @return mixed
 	 */
 	private function invoke_execute( C2PA_Verify $ability, $input ) {
@@ -157,23 +158,18 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Generate a test RSA keypair.
+	 * Generate a test EC P-256 keypair with self-signed certificate.
 	 *
-	 * @since 0.5.0
-	 * @return array{private_key: string, public_key: string}
+	 * @since 0.7.0
+	 * @return array{private_key: string, certificate_pem: string}
 	 */
 	private function generate_test_keypair(): array {
-		$res = openssl_pkey_new(
-			array(
-				'private_key_bits' => 1024,
-				'private_key_type' => OPENSSL_KEYTYPE_RSA,
-			)
-		);
-		openssl_pkey_export( $res, $private_key );
-		$details = openssl_pkey_get_details( $res );
-		return array(
-			'private_key' => $private_key,
-			'public_key'  => $details['key'],
-		);
+		$keypair = Local_Signer::generate_keypair();
+
+		if ( is_wp_error( $keypair ) ) {
+			$this->fail( 'generate_keypair() failed: ' . $keypair->get_error_message() );
+		}
+
+		return $keypair;
 	}
 }

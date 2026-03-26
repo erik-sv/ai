@@ -30,6 +30,15 @@ class Connected_SignerTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that the default service URL constant is set.
+	 *
+	 * @since 0.7.0
+	 */
+	public function test_default_service_url_constant(): void {
+		$this->assertSame( 'https://api.encypher.com/v1/c2pa/sign', Connected_Signer::DEFAULT_SERVICE_URL );
+	}
+
+	/**
 	 * Test that sign() with empty service URL returns WP_Error.
 	 *
 	 * @since 0.5.0
@@ -123,27 +132,28 @@ class Connected_SignerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that sign() returns the manifest string on a successful response.
+	 * Test that sign() returns decoded JUMBF binary on a successful response.
+	 *
+	 * The signing service returns the JUMBF manifest store as base64.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Updated for base64-encoded JUMBF response format.
 	 */
-	public function test_sign_returns_manifest_on_success(): void {
-		$manifest = wp_json_encode(
-			array(
-				'magic'  => 'test',
-				'signer' => 'connected',
-			)
-		);
+	public function test_sign_returns_decoded_manifest_on_success(): void {
+		// Simulate a minimal JUMBF manifest (just a box with 'jumb' type).
+		$fake_jumbf = pack( 'N', 16 ) . 'jumb' . str_repeat( "\x00", 8 );
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Test data encoding.
+		$encoded = base64_encode( $fake_jumbf );
 
 		add_filter(
 			'pre_http_request',
-			static function () use ( $manifest ) {
+			static function () use ( $encoded ) {
 				return array(
 					'response' => array(
 						'code'    => 200,
 						'message' => 'OK',
 					),
-					'body'     => wp_json_encode( array( 'manifest' => $manifest ) ),
+					'body'     => wp_json_encode( array( 'manifest' => $encoded ) ),
 					'headers'  => array(),
 				);
 			}
@@ -154,6 +164,44 @@ class Connected_SignerTest extends WP_UnitTestCase {
 
 		remove_all_filters( 'pre_http_request' );
 
-		$this->assertSame( $manifest, $result );
+		$this->assertIsString( $result );
+		$this->assertSame( $fake_jumbf, $result );
+	}
+
+	/**
+	 * Test that sign() sends the correct request body format.
+	 *
+	 * @since 0.7.0
+	 */
+	public function test_sign_sends_jumbf_format_in_request(): void {
+		$captured_body = null;
+
+		add_filter(
+			'pre_http_request',
+			static function ( $preempt, $parsed_args ) use ( &$captured_body ) {
+				$captured_body = $parsed_args['body'] ?? null;
+				return array(
+					'response' => array(
+						'code'    => 200,
+						'message' => 'OK',
+					),
+					// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Test data.
+					'body'     => wp_json_encode( array( 'manifest' => base64_encode( 'fake' ) ) ),
+					'headers'  => array(),
+				);
+			},
+			10,
+			2
+		);
+
+		$signer = new Connected_Signer( 'https://example.com/sign', 'api-key' );
+		$signer->sign( 'Test content.', array( 'title' => 'Test' ) );
+
+		remove_all_filters( 'pre_http_request' );
+
+		$this->assertNotNull( $captured_body );
+		$decoded = json_decode( (string) $captured_body, true );
+		$this->assertSame( 'jumbf', $decoded['format'] );
+		$this->assertSame( 'Test content.', $decoded['content'] );
 	}
 }

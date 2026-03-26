@@ -20,50 +20,49 @@ use WordPress\AI\Experiments\Content_Provenance\Signing\Local_Signer;
 class Local_SignerTest extends WP_UnitTestCase {
 
 	/**
-	 * Test that get_tier returns 'local'.
+	 * Test that get_tier() returns 'local'.
 	 *
-	 * @since 0.5.0
+	 * @since 0.7.0
 	 */
 	public function test_get_tier_returns_local(): void {
 		$signer = new Local_Signer(
 			array(
-				'private_key' => '',
-				'public_key'  => '',
+				'private_key'     => '',
+				'certificate_pem' => '',
 			)
 		);
 		$this->assertSame( 'local', $signer->get_tier() );
 	}
 
 	/**
-	 * Test that sign() returns a JSON string with a valid keypair.
+	 * Test that sign() with a valid EC keypair returns JUMBF binary bytes.
 	 *
-	 * @since 0.5.0
+	 * @since 0.7.0
 	 */
-	public function test_sign_with_valid_keypair_returns_string(): void {
+	public function test_sign_with_valid_keypair_returns_jumbf_bytes(): void {
 		$keypair = $this->generate_test_keypair();
 		$signer  = new Local_Signer( $keypair );
 
 		$result = $signer->sign( 'Test content.', array( 'title' => 'Test' ) );
 
 		$this->assertIsString( $result );
-		$decoded = json_decode( $result, true );
-		$this->assertIsArray( $decoded );
-		$this->assertArrayHasKey( 'signature', $decoded );
-		$this->assertSame( 'local', $decoded['signer'] );
+		// JUMBF box: 4-byte big-endian size followed by the 'jumb' box type.
+		$this->assertSame( 'jumb', substr( $result, 4, 4 ) );
 	}
 
 	/**
-	 * Test that sign() with invalid private key returns WP_Error.
+	 * Test that sign() with an empty private key returns a WP_Error with code 'c2pa_key_load_failed'.
 	 *
-	 * @since 0.5.0
+	 * @since 0.7.0
 	 */
-	public function test_sign_with_invalid_private_key_returns_error(): void {
+	public function test_sign_with_empty_private_key_returns_error(): void {
 		$signer = new Local_Signer(
 			array(
-				'private_key' => 'not-a-key',
-				'public_key'  => '',
+				'private_key'     => '',
+				'certificate_pem' => '',
 			)
 		);
+
 		$result = $signer->sign( 'Test.', array() );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -71,38 +70,93 @@ class Local_SignerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that sign() embeds the public key in the manifest.
+	 * Test that sign() with a valid key but empty certificate_pem returns a WP_Error with code 'c2pa_cert_invalid'.
 	 *
-	 * @since 0.5.0
+	 * @since 0.7.0
 	 */
-	public function test_sign_embeds_public_key(): void {
+	public function test_sign_with_missing_certificate_returns_error(): void {
 		$keypair = $this->generate_test_keypair();
-		$signer  = new Local_Signer( $keypair );
-		$result  = $signer->sign( 'Content.', array() );
+		$signer  = new Local_Signer(
+			array(
+				'private_key'     => $keypair['private_key'],
+				'certificate_pem' => '',
+			)
+		);
 
-		$this->assertIsString( $result );
-		$decoded = json_decode( $result, true );
-		$this->assertSame( $keypair['public_key'], $decoded['public_key'] );
+		$result = $signer->sign( 'Test.', array() );
+
+		$this->assertInstanceOf( \WP_Error::class, $result );
+		$this->assertSame( 'c2pa_cert_invalid', $result->get_error_code() );
 	}
 
 	/**
-	 * Generate a test RSA keypair.
+	 * Test that generate_keypair() returns an EC P-256 keypair with both keys present.
 	 *
-	 * @since 0.5.0
-	 * @return array{private_key: string, public_key: string}
+	 * @since 0.7.0
+	 */
+	public function test_generate_keypair_returns_ec_p256(): void {
+		$keypair = Local_Signer::generate_keypair( 'Test Site' );
+
+		$this->assertIsArray( $keypair );
+		$this->assertArrayHasKey( 'private_key', $keypair );
+		$this->assertArrayHasKey( 'certificate_pem', $keypair );
+		$this->assertNotEmpty( $keypair['private_key'] );
+		$this->assertNotEmpty( $keypair['certificate_pem'] );
+
+		$key_resource = openssl_pkey_get_private( $keypair['private_key'] );
+		$this->assertNotFalse( $key_resource, 'Private key must be a valid PEM key.' );
+
+		$details = openssl_pkey_get_details( $key_resource );
+		$this->assertIsArray( $details );
+		$this->assertSame( OPENSSL_KEYTYPE_EC, $details['type'] );
+		$this->assertSame( 'prime256v1', $details['ec']['curve_name'] );
+	}
+
+	/**
+	 * Test that pem_to_der() converts a certificate PEM to DER bytes starting with the ASN.1 SEQUENCE tag (0x30).
+	 *
+	 * @since 0.7.0
+	 */
+	public function test_pem_to_der_converts_certificate(): void {
+		$keypair = $this->generate_test_keypair();
+
+		$der = Local_Signer::pem_to_der( $keypair['certificate_pem'] );
+
+		$this->assertNotEmpty( $der );
+		// ASN.1 SEQUENCE tag is 0x30 (decimal 48).
+		$this->assertSame( 0x30, ord( $der[0] ) );
+	}
+
+	/**
+	 * Test that sign() produces different JUMBF output for different content strings.
+	 *
+	 * @since 0.7.0
+	 */
+	public function test_sign_produces_different_manifests_for_different_content(): void {
+		$keypair = $this->generate_test_keypair();
+		$signer  = new Local_Signer( $keypair );
+
+		$result_a = $signer->sign( 'Content A.', array( 'title' => 'Post A' ) );
+		$result_b = $signer->sign( 'Content B.', array( 'title' => 'Post B' ) );
+
+		$this->assertIsString( $result_a );
+		$this->assertIsString( $result_b );
+		$this->assertNotSame( $result_a, $result_b );
+	}
+
+	/**
+	 * Generate an EC P-256 test keypair using Local_Signer::generate_keypair().
+	 *
+	 * @since 0.7.0
+	 * @return array{private_key: string, certificate_pem: string}
 	 */
 	private function generate_test_keypair(): array {
-		$res = openssl_pkey_new(
-			array(
-				'private_key_bits' => 1024,
-				'private_key_type' => OPENSSL_KEYTYPE_RSA,
-			)
-		);
-		openssl_pkey_export( $res, $private_key );
-		$details = openssl_pkey_get_details( $res );
-		return array(
-			'private_key' => $private_key,
-			'public_key'  => $details['key'],
-		);
+		$keypair = Local_Signer::generate_keypair( 'Test' );
+
+		if ( is_wp_error( $keypair ) ) {
+			$this->fail( 'generate_keypair() failed: ' . $keypair->get_error_message() );
+		}
+
+		return $keypair;
 	}
 }

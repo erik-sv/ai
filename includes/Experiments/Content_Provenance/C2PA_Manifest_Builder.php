@@ -18,9 +18,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Builds and verifies C2PA content manifests.
  *
- * Constructs the claim structure required by the C2PA 2.3 text authentication
- * specification (Section A.7), delegates signing to the configured backend,
- * and provides a symmetric verification path for published content.
+ * Delegates to a Signing_Interface backend which produces spec-compliant
+ * JUMBF manifest stores with COSE_Sign1 signatures and ES256 signing.
+ * Verification extracts the JUMBF from Unicode variation selectors and
+ * validates the content hash binding.
  *
  * @since 0.5.0
  */
@@ -29,7 +30,7 @@ class C2PA_Manifest_Builder {
 	/**
 	 * C2PA text magic byte sequence (ASCII "C2PATXT\0").
 	 *
-	 * Identifies the payload as a C2PA text manifest container per spec §A.7.
+	 * Identifies the payload as a C2PA text manifest container per spec Section A.7.
 	 *
 	 * @since 0.5.0
 	 * @var string
@@ -47,18 +48,18 @@ class C2PA_Manifest_Builder {
 	/**
 	 * Build a C2PA manifest for the given content.
 	 *
-	 * Constructs the full claim set (actions, hash, soft-binding, optional
-	 * ingredient chain), delegates to the signer, and returns the signed
-	 * manifest JSON alongside the content hash for post-meta storage.
+	 * Delegates to the signer backend, which produces JUMBF manifest store
+	 * bytes containing CBOR-encoded claims and a COSE_Sign1 signature.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Returns JUMBF binary instead of JSON manifest.
 	 *
-	 * @param string              $content           Plain text content.
-	 * @param string              $action            'c2pa.created' or 'c2pa.edited'.
-	 * @param string|null         $previous_manifest Previous manifest JSON for ingredient chain (edit flow).
-	 * @param array<string,mixed> $metadata          Post metadata: title, url, author, post_id.
-	 * @param \WordPress\AI\Experiments\Content_Provenance\Signing\Signing_Interface   $signer            Signing backend to use.
-	 * @return array{manifest: string, content_hash: string}|\WP_Error Signed manifest and hash, or error.
+	 * @param string                                                                     $content           Plain text content.
+	 * @param string                                                                     $action            'c2pa.created' or 'c2pa.edited'.
+	 * @param string|null                                                                $previous_manifest Previous manifest for ingredient chain (unused in binary format).
+	 * @param array<string, mixed>                                                       $metadata          Post metadata: title, url, author, post_id.
+	 * @param \WordPress\AI\Experiments\Content_Provenance\Signing\Signing_Interface      $signer            Signing backend to use.
+	 * @return array{manifest: string, content_hash: string}|\WP_Error Signed manifest bytes and hash, or error.
 	 */
 	public static function build(
 		string $content,
@@ -69,55 +70,9 @@ class C2PA_Manifest_Builder {
 	) {
 		$content_hash = hash( 'sha256', $content );
 
-		$claims = array(
-			'title'        => $metadata['title'] ?? '',
-			'author'       => $metadata['author'] ?? get_bloginfo( 'name' ),
-			'url'          => $metadata['url'] ?? '',
-			'post_id'      => $metadata['post_id'] ?? 0,
-			'generated_at' => gmdate( 'c' ),
-			'generator'    => 'WordPress/AI Content Provenance Experiment',
-			'assertions'   => array(
-				'c2pa.actions.v1'      => array(
-					'action'            => $action,
-					'digitalSourceType' => 'humanEdited',
-				),
-				'c2pa.hash.data.v1'    => array(
-					'algorithm' => 'sha256',
-					'hash'      => $content_hash,
-				),
-				'c2pa.soft_binding.v1' => array(
-					'alg'             => 'vs16',
-					'document_length' => mb_strlen( $content ),
-				),
-			),
-		);
+		$metadata['action'] = $action;
 
-		// Add ingredient reference for edited content.
-		if ( 'c2pa.edited' === $action && null !== $previous_manifest ) {
-			$claims['assertions']['c2pa.ingredient.v2'] = array(
-				'relationship'  => 'parentOf',
-				'dc:title'      => $metadata['title'] ?? '',
-				'thumbnail'     => null,
-				'manifest_data' => $previous_manifest,
-			);
-		}
-
-		$manifest_json = wp_json_encode(
-			array(
-				'magic'   => base64_encode( self::MAGIC ),
-				'version' => self::VERSION,
-				'claims'  => $claims,
-			)
-		);
-
-		if ( ! $manifest_json ) {
-			return new \WP_Error(
-				'c2pa_manifest_encode_failed',
-				esc_html__( 'Failed to encode C2PA manifest.', 'ai' )
-			);
-		}
-
-		$result = $signer->sign( $content, $claims );
+		$result = $signer->sign( $content, $metadata );
 
 		if ( is_wp_error( $result ) ) {
 			return $result;
@@ -132,12 +87,14 @@ class C2PA_Manifest_Builder {
 	/**
 	 * Extract and verify C2PA provenance from text.
 	 *
-	 * Extracts embedded variation-selector data, decodes the manifest JSON,
+	 * Extracts embedded variation-selector data, parses the manifest,
 	 * and validates the SHA-256 content hash against the stripped plain text.
-	 * Signature cryptographic verification is intentionally out of scope here
-	 * and delegated to the relevant ability class.
+	 *
+	 * Supports both the new JUMBF binary format and legacy JSON format
+	 * for backwards compatibility with previously signed content.
 	 *
 	 * @since 0.5.0
+	 * @since 0.7.0 Added JUMBF binary format support with legacy JSON fallback.
 	 *
 	 * @param string $text Text that may contain embedded Unicode provenance.
 	 * @return array{verified: bool, status: string, manifest: array<string, mixed>|null, error: string|null}
@@ -154,18 +111,35 @@ class C2PA_Manifest_Builder {
 			);
 		}
 
-		$manifest = json_decode( $embedded, true );
+		// Detect format: legacy JSON starts with '{', JUMBF is binary.
+		if ( strlen( $embedded ) > 0 && '{' === $embedded[0] ) {
+			return self::verify_legacy_json( $text, $embedded );
+		}
+
+		return self::verify_jumbf( $text, $embedded );
+	}
+
+	/**
+	 * Verifies legacy JSON manifest format (pre-0.7.0).
+	 *
+	 * @since 0.7.0
+	 *
+	 * @param string $text     Full text with embedded manifest.
+	 * @param string $json_str Extracted JSON manifest string.
+	 * @return array{verified: bool, status: string, manifest: array<string, mixed>|null, error: string|null}
+	 */
+	private static function verify_legacy_json( string $text, string $json_str ): array {
+		$manifest = json_decode( $json_str, true );
 
 		if ( ! is_array( $manifest ) ) {
 			return array(
 				'verified' => false,
 				'status'   => 'invalid',
 				'manifest' => null,
-				'error'    => 'Could not parse manifest',
+				'error'    => 'Could not parse legacy manifest',
 			);
 		}
 
-		// Verify content hash against stripped plain text.
 		$plain_text   = Unicode_Embedder::strip( $text );
 		$content_hash = hash( 'sha256', $plain_text );
 		$stored_hash  = $manifest['claims']['assertions']['c2pa.hash.data.v1']['hash'] ?? null;
@@ -181,8 +155,66 @@ class C2PA_Manifest_Builder {
 
 		return array(
 			'verified' => true,
-			'status'   => 'verified',
+			'status'   => 'legacy_verified',
 			'manifest' => $manifest,
+			'error'    => null,
+		);
+	}
+
+	/**
+	 * Verifies JUMBF binary manifest format (0.7.0+).
+	 *
+	 * Performs content hash verification by locating the hash.data assertion
+	 * within the JUMBF structure. Full COSE_Sign1 signature verification
+	 * is delegated to the verify ability class.
+	 *
+	 * @since 0.7.0
+	 *
+	 * @param string $text       Full text with embedded manifest.
+	 * @param string $jumbf_bytes Extracted JUMBF manifest store bytes.
+	 * @return array{verified: bool, status: string, manifest: array<string, mixed>|null, error: string|null}
+	 */
+	private static function verify_jumbf( string $text, string $jumbf_bytes ): array {
+		// Validate minimum JUMBF structure: must start with a box header.
+		if ( strlen( $jumbf_bytes ) < 16 ) {
+			return array(
+				'verified' => false,
+				'status'   => 'invalid',
+				'manifest' => null,
+				'error'    => 'Manifest too short for JUMBF',
+			);
+		}
+
+		// Verify the outer box type is 'jumb' (JUMBF superbox).
+		$box_type = substr( $jumbf_bytes, 4, 4 );
+		if ( 'jumb' !== $box_type ) {
+			return array(
+				'verified' => false,
+				'status'   => 'invalid',
+				'manifest' => null,
+				'error'    => 'Invalid JUMBF structure',
+			);
+		}
+
+		// Content hash verification: compute hash of stripped text.
+		$plain_text   = Unicode_Embedder::strip( $text );
+		$content_hash = hash( 'sha256', $plain_text, true );
+
+		// Search for the content hash in the JUMBF bytes.
+		// The hash appears in the c2pa.hash.data assertion as a CBOR byte string.
+		if ( false === strpos( $jumbf_bytes, $content_hash ) ) {
+			return array(
+				'verified' => false,
+				'status'   => 'tampered',
+				'manifest' => array( 'format' => 'jumbf' ),
+				'error'    => 'Content hash mismatch',
+			);
+		}
+
+		return array(
+			'verified' => true,
+			'status'   => 'verified',
+			'manifest' => array( 'format' => 'jumbf' ),
 			'error'    => null,
 		);
 	}
