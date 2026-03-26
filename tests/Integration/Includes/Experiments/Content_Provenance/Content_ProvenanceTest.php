@@ -204,15 +204,12 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test provenance chain: both initial and edited builds succeed.
-	 *
-	 * Ingredient chains are not yet implemented in the binary JUMBF format,
-	 * so this test verifies both builds produce valid results.
+	 * Test provenance chain: edited manifest includes ingredient referencing the first.
 	 *
 	 * @since 0.5.0
-	 * @since 0.7.0 Updated for binary JUMBF format.
+	 * @since 0.7.0 Updated for binary JUMBF format with ingredient chain.
 	 */
-	public function test_edited_manifest_builds_successfully(): void {
+	public function test_edited_manifest_builds_with_ingredient_chain(): void {
 		$keypair = $this->generate_test_keypair();
 		$signer  = new Local_Signer( $keypair );
 
@@ -227,6 +224,21 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 		// Both should be valid JUMBF.
 		$this->assertSame( 'jumb', substr( $first['manifest'], 4, 4 ) );
 		$this->assertSame( 'jumb', substr( $second['manifest'], 4, 4 ) );
+
+		// Second manifest should contain the SHA-256 hash of the first (ingredient binding).
+		$first_hash = hash( 'sha256', $first['manifest'], true );
+		$this->assertStringContainsString(
+			$first_hash,
+			$second['manifest'],
+			'Edited manifest should contain SHA-256 hash of the first manifest (ingredient chain).'
+		);
+
+		// Second manifest should be larger (it includes ingredient assertion).
+		$this->assertGreaterThan(
+			strlen( $first['manifest'] ),
+			strlen( $second['manifest'] ),
+			'Edited manifest with ingredient should be larger than the initial manifest.'
+		);
 	}
 
 	/**

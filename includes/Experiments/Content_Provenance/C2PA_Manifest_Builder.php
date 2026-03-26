@@ -72,6 +72,10 @@ class C2PA_Manifest_Builder {
 
 		$metadata['action'] = $action;
 
+		if ( null !== $previous_manifest && '' !== $previous_manifest ) {
+			$metadata['previous_manifest'] = $previous_manifest;
+		}
+
 		$result = $signer->sign( $content, $metadata );
 
 		if ( is_wp_error( $result ) ) {

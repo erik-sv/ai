@@ -201,4 +201,84 @@ class Claim_BuilderTest extends WP_UnitTestCase {
 			'Actions assertion should contain the custom digital source type.'
 		);
 	}
+
+	/**
+	 * Test that no ingredient assertion is included without a previous manifest.
+	 */
+	public function test_no_ingredient_assertion_without_previous_manifest(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$result  = $builder->build();
+
+		$this->assertArrayNotHasKey(
+			Claim_Builder::ASSERTION_INGREDIENT,
+			$result['assertion_map'],
+			'Assertion map should not contain ingredient when no previous manifest.'
+		);
+	}
+
+	/**
+	 * Test that ingredient assertion is included when a previous manifest is provided.
+	 */
+	public function test_ingredient_assertion_present_with_previous_manifest(): void {
+		$previous = 'fake-previous-manifest-bytes';
+		$builder  = new Claim_Builder( 'Test.', 'c2pa.edited', array(), 'urn:uuid:test', $previous );
+		$result   = $builder->build();
+
+		$this->assertArrayHasKey(
+			Claim_Builder::ASSERTION_INGREDIENT,
+			$result['assertion_map'],
+			'Assertion map should contain ingredient when previous manifest is provided.'
+		);
+		$this->assertNotEmpty( $result['assertion_map'][ Claim_Builder::ASSERTION_INGREDIENT ] );
+	}
+
+	/**
+	 * Test that ingredient assertion contains SHA-256 hash of previous manifest.
+	 */
+	public function test_ingredient_assertion_contains_previous_manifest_hash(): void {
+		$previous      = 'previous-manifest-data-for-hashing';
+		$expected_hash = hash( 'sha256', $previous, true );
+		$builder       = new Claim_Builder( 'Test.', 'c2pa.edited', array(), 'urn:uuid:test', $previous );
+		$result        = $builder->build();
+
+		$ingredient_cbor = $result['assertion_map'][ Claim_Builder::ASSERTION_INGREDIENT ];
+
+		$this->assertStringContainsString(
+			$expected_hash,
+			$ingredient_cbor,
+			'Ingredient assertion should contain SHA-256 hash of previous manifest.'
+		);
+	}
+
+	/**
+	 * Test that claim contains ingredients reference when previous manifest exists.
+	 */
+	public function test_claim_contains_ingredients_with_previous_manifest(): void {
+		$previous = 'some-previous-manifest';
+		$label    = 'urn:uuid:chain-test';
+		$builder  = new Claim_Builder( 'Test.', 'c2pa.edited', array(), $label, $previous );
+		$result   = $builder->build();
+
+		// The claim CBOR should contain the ingredient assertion URI.
+		$expected_uri = $label . '/c2pa.assertions/' . Claim_Builder::ASSERTION_INGREDIENT;
+		$this->assertStringContainsString(
+			$expected_uri,
+			$result['claim_cbor'],
+			'Claim should contain ingredient assertion URI.'
+		);
+	}
+
+	/**
+	 * Test that empty previous manifest string does not produce an ingredient assertion.
+	 */
+	public function test_empty_previous_manifest_produces_no_ingredient(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.edited', array(), 'urn:uuid:test', '' );
+		$result  = $builder->build();
+
+		$this->assertArrayNotHasKey(
+			Claim_Builder::ASSERTION_INGREDIENT,
+			$result['assertion_map'],
+			'Empty string previous manifest should not produce ingredient assertion.'
+		);
+	}
 }

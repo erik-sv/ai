@@ -83,13 +83,19 @@ class Connected_Signer implements Signing_Interface {
 			);
 		}
 
-		$body = wp_json_encode(
-			array(
-				'content'  => $content,
-				'metadata' => $metadata,
-				'format'   => 'jumbf',
-			)
+		$request_data = array(
+			'content'  => $content,
+			'metadata' => $metadata,
+			'format'   => 'jumbf',
 		);
+
+		// Include previous manifest for ingredient chain when available.
+		if ( isset( $metadata['previous_manifest'] ) && '' !== $metadata['previous_manifest'] ) {
+			// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Binary manifest must be base64-encoded for JSON transport.
+			$request_data['previous_manifest'] = base64_encode( (string) $metadata['previous_manifest'] );
+		}
+
+		$body = wp_json_encode( $request_data );
 
 		if ( false === $body ) {
 			return new \WP_Error(

@@ -82,9 +82,10 @@ class Local_Signer implements Signing_Interface {
 		$manifest_label = 'urn:uuid:' . wp_generate_uuid4();
 
 		// Step 1: Build assertions and claim.
-		$action        = isset( $metadata['action'] ) ? (string) $metadata['action'] : 'c2pa.created';
-		$claim_builder = new Claim_Builder( $content, $action, $metadata, $manifest_label );
-		$claim_result  = $claim_builder->build();
+		$action            = isset( $metadata['action'] ) ? (string) $metadata['action'] : 'c2pa.created';
+		$previous_manifest = isset( $metadata['previous_manifest'] ) ? (string) $metadata['previous_manifest'] : null;
+		$claim_builder     = new Claim_Builder( $content, $action, $metadata, $manifest_label, $previous_manifest );
+		$claim_result      = $claim_builder->build();
 
 		// Step 2: Build COSE_Sign1 signature over the claim.
 		try {

@@ -45,6 +45,13 @@ final class Claim_Builder {
 	public const ASSERTION_SOFT_BINDING = 'c2pa.soft_binding';
 
 	/**
+	 * C2PA assertion label for ingredient reference.
+	 *
+	 * @var string
+	 */
+	public const ASSERTION_INGREDIENT = 'c2pa.ingredient.v2';
+
+	/**
 	 * Content text to sign.
 	 *
 	 * @var string
@@ -73,6 +80,13 @@ final class Claim_Builder {
 	private string $manifest_label;
 
 	/**
+	 * Previous manifest bytes for ingredient chain, or null.
+	 *
+	 * @var string|null
+	 */
+	private ?string $previous_manifest;
+
+	/**
 	 * IPTC digital source type URI.
 	 *
 	 * @var string
@@ -84,16 +98,18 @@ final class Claim_Builder {
 	 *
 	 * @since 0.7.0
 	 *
-	 * @param string               $content        Content text to sign.
-	 * @param string               $action         C2PA action type (e.g. "c2pa.created", "c2pa.edited").
-	 * @param array<string, mixed> $metadata       Post metadata (title, post_id, etc.).
-	 * @param string               $manifest_label Manifest label for JUMBF self-references.
+	 * @param string               $content            Content text to sign.
+	 * @param string               $action             C2PA action type (e.g. "c2pa.created", "c2pa.edited").
+	 * @param array<string, mixed> $metadata           Post metadata (title, post_id, etc.).
+	 * @param string               $manifest_label     Manifest label for JUMBF self-references.
+	 * @param string|null          $previous_manifest  Previous manifest bytes for ingredient chain.
 	 */
-	public function __construct( string $content, string $action, array $metadata, string $manifest_label ) {
-		$this->content        = $content;
-		$this->action         = $action;
-		$this->metadata       = $metadata;
-		$this->manifest_label = $manifest_label;
+	public function __construct( string $content, string $action, array $metadata, string $manifest_label, ?string $previous_manifest = null ) {
+		$this->content           = $content;
+		$this->action            = $action;
+		$this->metadata          = $metadata;
+		$this->manifest_label    = $manifest_label;
+		$this->previous_manifest = $previous_manifest;
 	}
 
 	/**
@@ -136,11 +152,17 @@ final class Claim_Builder {
 	 * @return array<string, string> Assertion label => CBOR-encoded bytes.
 	 */
 	private function build_assertions(): array {
-		return array(
+		$assertions = array(
 			self::ASSERTION_ACTIONS      => $this->build_actions_assertion(),
 			self::ASSERTION_HASH_DATA    => $this->build_hash_data_assertion(),
 			self::ASSERTION_SOFT_BINDING => $this->build_soft_binding_assertion(),
 		);
+
+		if ( null !== $this->previous_manifest && '' !== $this->previous_manifest ) {
+			$assertions[ self::ASSERTION_INGREDIENT ] = $this->build_ingredient_assertion();
+		}
+
+		return $assertions;
 	}
 
 	/**
@@ -199,6 +221,34 @@ final class Claim_Builder {
 	}
 
 	/**
+	 * Builds the c2pa.ingredient.v2 assertion referencing a previous manifest.
+	 *
+	 * Per C2PA 2.3 §8.3, the ingredient assertion includes the hash of the
+	 * previous manifest to form a provenance chain. Verifiers can trace edits
+	 * back through the chain by following ingredient references.
+	 *
+	 * @since 0.7.0
+	 *
+	 * @return string CBOR-encoded assertion.
+	 */
+	private function build_ingredient_assertion(): string {
+		/** @var string $previous_manifest — guaranteed non-null by caller. */
+		$previous_manifest = (string) $this->previous_manifest;
+
+		$assertion = array(
+			'relationship' => 'parentOf',
+			'title'        => 'Previous version',
+			'format'       => 'application/c2pa',
+			'hash'         => array(
+				'name'  => 'sha256',
+				'value' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $previous_manifest, true ) ),
+			),
+		);
+
+		return CBOR_Encoder::encode( $assertion );
+	}
+
+	/**
 	 * Builds the C2PA claim structure referencing assertion hashes.
 	 *
 	 * @since 0.7.0
@@ -234,6 +284,21 @@ final class Claim_Builder {
 			'signature'          => 'self#jumbf=' . $this->manifest_label . '/c2pa.signature',
 			'assertions'         => $assertion_refs,
 		);
+
+		// Add ingredients array when there is a previous manifest in the chain.
+		if ( null !== $this->previous_manifest && '' !== $this->previous_manifest ) {
+			$ingredient_url       = 'self#jumbf=' . $this->manifest_label . '/c2pa.assertions/' . self::ASSERTION_INGREDIENT;
+			$ingredient_cbor      = $assertion_map[ self::ASSERTION_INGREDIENT ] ?? '';
+			$claim['ingredients'] = array(
+				array(
+					'url'  => $ingredient_url,
+					'hash' => array(
+						'name'  => 'sha256',
+						'value' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $ingredient_cbor, true ) ),
+					),
+				),
+			);
+		}
 
 		return CBOR_Encoder::encode( $claim );
 	}

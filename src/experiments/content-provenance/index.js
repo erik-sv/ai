@@ -6,7 +6,7 @@ import { useSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 
-const data = window.ContentProvenanceData || {};
+const data = window.aiContentProvenanceData || {};
 
 // ── Badge component ──────────────────────────────────────────────────────────
 
