@@ -161,12 +161,13 @@ class COSE_Sign1_BuilderTest extends WP_UnitTestCase {
 	 * Test that DER-to-raw conversion produces exactly 64 bytes for ES256.
 	 */
 	public function test_der_to_raw_produces_64_bytes(): void {
-		$payload = CBOR_Encoder::encode( 'test' );
-		$builder = new COSE_Sign1_Builder( $this->private_key_pem, $this->certificate_der, $payload );
-		$result  = $builder->build();
+		$key = openssl_pkey_get_private( $this->private_key_pem );
+		$this->assertNotFalse( $key );
 
-		$signature = $this->extract_signature_from_cose( $result );
-		$this->assertSame( 64, strlen( $signature ), 'Raw ECDSA signature should be exactly 64 bytes.' );
+		openssl_sign( 'test data for der conversion', $der_sig, $key, OPENSSL_ALGO_SHA256 );
+
+		$raw = COSE_Sign1_Builder::der_to_raw_ecdsa( $der_sig );
+		$this->assertSame( 64, strlen( $raw ), 'Raw ECDSA signature should be exactly 64 bytes.' );
 	}
 
 	/**
@@ -226,13 +227,12 @@ class COSE_Sign1_BuilderTest extends WP_UnitTestCase {
 	 * @return string Raw signature bytes.
 	 */
 	private function extract_signature_from_cose( string $cose_bytes ): string {
-		// Find the last CBOR byte string in the structure (the signature).
-		// The signature is a 64-byte byte string, preceded by 0x5840 (bstr of length 64).
-		$pos = strrpos( $cose_bytes, "\x58\x40" );
-		if ( false === $pos ) {
-			$this->fail( 'Could not find 64-byte signature in COSE structure.' );
-		}
-		return substr( $cose_bytes, $pos + 2, 64 );
+		// The signature is always the last element of the COSE_Sign1 array.
+		// For ES256 it is a 64-byte byte string preceded by CBOR marker 0x58 0x40.
+		$len = strlen( $cose_bytes );
+		$this->assertGreaterThanOrEqual( 66, $len, 'COSE structure too short for signature.' );
+		$this->assertSame( "\x58\x40", substr( $cose_bytes, $len - 66, 2 ), 'Expected 64-byte bstr marker before final signature.' );
+		return substr( $cose_bytes, $len - 64 );
 	}
 
 	/**
