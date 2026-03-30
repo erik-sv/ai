@@ -21,14 +21,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * standard verifiers recognise as trusted. Pre-populated with the Encypher
  * API URL by default — publishers just need a free API key to start signing.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class Connected_Signer implements Signing_Interface {
 
 	/**
 	 * Default Encypher API signing endpoint.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	public const DEFAULT_SERVICE_URL = 'https://api.encypher.com/v1/c2pa/sign';
@@ -36,7 +36,7 @@ class Connected_Signer implements Signing_Interface {
 	/**
 	 * Remote signing service URL.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	private string $service_url;
@@ -44,7 +44,7 @@ class Connected_Signer implements Signing_Interface {
 	/**
 	 * API key for authenticating with the signing service.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	private string $api_key;
@@ -52,7 +52,7 @@ class Connected_Signer implements Signing_Interface {
 	/**
 	 * Constructor.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param string $service_url Remote signing service base URL.
 	 * @param string $api_key     Bearer token for service authentication.
@@ -68,8 +68,7 @@ class Connected_Signer implements Signing_Interface {
 	 * POSTs content and metadata to the signing service. The service builds
 	 * a spec-compliant C2PA JUMBF manifest store and returns it base64-encoded.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Returns JUMBF binary instead of JSON.
+	 * @since x.x.x Returns JUMBF binary instead of JSON.
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).
@@ -166,7 +165,7 @@ class Connected_Signer implements Signing_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return string Always 'connected'.
 	 */

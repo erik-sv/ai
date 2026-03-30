@@ -9,6 +9,8 @@ declare( strict_types=1 );
 
 namespace WordPress\AI\Experiments\Content_Provenance;
 
+use WordPress\AI\Experiments\Content_Provenance\C2PA\COSE_Sign1_Verifier;
+use WordPress\AI\Experiments\Content_Provenance\C2PA\JUMBF_Reader;
 use WordPress\AI\Experiments\Content_Provenance\Signing\Signing_Interface;
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -23,7 +25,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Verification extracts the JUMBF from Unicode variation selectors and
  * validates the content hash binding.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class C2PA_Manifest_Builder {
 
@@ -32,7 +34,7 @@ class C2PA_Manifest_Builder {
 	 *
 	 * Identifies the payload as a C2PA text manifest container per spec Section A.7.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	public const MAGIC = "\x43\x32\x50\x41\x54\x58\x54\x00";
@@ -40,7 +42,7 @@ class C2PA_Manifest_Builder {
 	/**
 	 * Manifest format version.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var int
 	 */
 	public const VERSION = 1;
@@ -51,8 +53,7 @@ class C2PA_Manifest_Builder {
 	 * Delegates to the signer backend, which produces JUMBF manifest store
 	 * bytes containing CBOR-encoded claims and a COSE_Sign1 signature.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Returns JUMBF binary instead of JSON manifest.
+	 * @since x.x.x Returns JUMBF binary instead of JSON manifest.
 	 *
 	 * @param string                                                                     $content           Plain text content.
 	 * @param string                                                                     $action            'c2pa.created' or 'c2pa.edited'.
@@ -97,8 +98,7 @@ class C2PA_Manifest_Builder {
 	 * Supports both the new JUMBF binary format and legacy JSON format
 	 * for backwards compatibility with previously signed content.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Added JUMBF binary format support with legacy JSON fallback.
+	 * @since x.x.x Added JUMBF binary format support with legacy JSON fallback.
 	 *
 	 * @param string $text Text that may contain embedded Unicode provenance.
 	 * @return array{verified: bool, status: string, manifest: array<string, mixed>|null, error: string|null}
@@ -126,7 +126,7 @@ class C2PA_Manifest_Builder {
 	/**
 	 * Verifies legacy JSON manifest format (pre-0.7.0).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $text     Full text with embedded manifest.
 	 * @param string $json_str Extracted JSON manifest string.
@@ -168,13 +168,13 @@ class C2PA_Manifest_Builder {
 	/**
 	 * Verifies JUMBF binary manifest format (0.7.0+).
 	 *
-	 * Performs content hash verification by locating the hash.data assertion
-	 * within the JUMBF structure. Full COSE_Sign1 signature verification
-	 * is delegated to the verify ability class.
+	 * Performs structural validation, content hash verification, and
+	 * COSE_Sign1 cryptographic signature verification against the
+	 * certificate embedded in the manifest's x5chain header.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
-	 * @param string $text       Full text with embedded manifest.
+	 * @param string $text        Full text with embedded manifest.
 	 * @param string $jumbf_bytes Extracted JUMBF manifest store bytes.
 	 * @return array{verified: bool, status: string, manifest: array<string, mixed>|null, error: string|null}
 	 */
@@ -200,18 +200,40 @@ class C2PA_Manifest_Builder {
 			);
 		}
 
-		// Content hash verification: compute hash of stripped text.
+		// Content hash verification: compute hash of stripped text and check
+		// that it appears in the JUMBF bytes (inside the c2pa.hash.data assertion).
 		$plain_text   = Unicode_Embedder::strip( $text );
 		$content_hash = hash( 'sha256', $plain_text, true );
 
-		// Search for the content hash in the JUMBF bytes.
-		// The hash appears in the c2pa.hash.data assertion as a CBOR byte string.
 		if ( false === strpos( $jumbf_bytes, $content_hash ) ) {
 			return array(
 				'verified' => false,
 				'status'   => 'tampered',
 				'manifest' => array( 'format' => 'jumbf' ),
 				'error'    => 'Content hash mismatch',
+			);
+		}
+
+		// Extract and verify the COSE_Sign1 signature.
+		$cose_bytes = JUMBF_Reader::extract_cose_signature( $jumbf_bytes );
+
+		if ( null === $cose_bytes ) {
+			return array(
+				'verified' => false,
+				'status'   => 'invalid',
+				'manifest' => array( 'format' => 'jumbf' ),
+				'error'    => 'No COSE_Sign1 signature found in manifest',
+			);
+		}
+
+		$sig_result = COSE_Sign1_Verifier::verify( $cose_bytes );
+
+		if ( ! $sig_result['valid'] ) {
+			return array(
+				'verified' => false,
+				'status'   => 'tampered',
+				'manifest' => array( 'format' => 'jumbf' ),
+				'error'    => $sig_result['error'] ?? 'Signature verification failed',
 			);
 		}
 

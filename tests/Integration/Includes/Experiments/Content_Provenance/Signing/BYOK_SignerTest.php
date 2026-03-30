@@ -48,7 +48,8 @@ class BYOK_SignerTest extends WP_UnitTestCase {
 		$this->assertIsArray( $keypair );
 
 		/** @var array{private_key: string, certificate_pem: string} $keypair */
-		$tmp = sys_get_temp_dir() . '/byok_test_' . uniqid();
+		$tmp_dir = ABSPATH . 'wp-content/';
+		$tmp     = $tmp_dir . 'byok_test_' . uniqid();
 
 		$this->temp_key_file  = $tmp . '_key.pem';
 		$this->temp_cert_file = $tmp . '_cert.pem';
@@ -96,7 +97,7 @@ class BYOK_SignerTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that sign() with a nonexistent key_path returns WP_Error with c2pa_byok_cert_unreadable.
+	 * Test that sign() with a nonexistent key_path returns WP_Error with c2pa_byok_path_invalid.
 	 *
 	 * @since 0.7.0
 	 */
@@ -105,7 +106,7 @@ class BYOK_SignerTest extends WP_UnitTestCase {
 		$result = $signer->sign( 'Content.', array() );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
-		$this->assertSame( 'c2pa_byok_cert_unreadable', $result->get_error_code() );
+		$this->assertSame( 'c2pa_byok_path_invalid', $result->get_error_code() );
 	}
 
 	/**

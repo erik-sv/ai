@@ -16,14 +16,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Renders an optional "Click to Verify" badge on published posts.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class Verification_Badge {
 
 	/**
 	 * Register the frontend badge filter.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public static function register_hooks(): void {
 		add_filter( 'the_content', array( self::class, 'maybe_append_badge' ), 99 );
@@ -32,7 +32,7 @@ class Verification_Badge {
 	/**
 	 * Append the C2PA badge to singular published posts if the post is signed.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param string $content The post content.
 	 * @return string Content with optional badge appended.

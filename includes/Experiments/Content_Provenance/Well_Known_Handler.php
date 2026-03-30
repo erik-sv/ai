@@ -16,21 +16,21 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Handles /.well-known/c2pa discovery endpoint per C2PA 2.x §6.4.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class Well_Known_Handler {
 
 	/**
 	 * Query variable name used to identify this request.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public const QUERY_VAR = 'c2pa_well_known';
 
 	/**
 	 * Register the rewrite rule for /.well-known/c2pa.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public static function add_rewrite_rule(): void {
 		add_rewrite_rule(
@@ -50,7 +50,7 @@ class Well_Known_Handler {
 	/**
 	 * If the current request is for /.well-known/c2pa, output the discovery document.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public static function maybe_handle(): void {
 		if ( ! get_query_var( self::QUERY_VAR ) ) {
@@ -70,8 +70,7 @@ class Well_Known_Handler {
 	 *
 	 * Uses spec-compliant field names per C2PA 2.3.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Updated to use C2PA spec-compliant field names.
+	 * @since x.x.x Updated to use C2PA spec-compliant field names.
 	 *
 	 * @return array<string, mixed> The discovery document.
 	 */

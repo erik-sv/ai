@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * COSE_Sign1 builder with ES256 signing.
  *
- * @since 0.7.0
+ * @since x.x.x
  */
 final class COSE_Sign1_Builder {
 
@@ -75,7 +75,7 @@ final class COSE_Sign1_Builder {
 	/**
 	 * Constructor.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $private_key_pem  PEM-encoded EC P-256 private key.
 	 * @param string $certificate_der  DER-encoded X.509 certificate.
@@ -93,7 +93,7 @@ final class COSE_Sign1_Builder {
 	 *
 	 * Returns CBOR-encoded tag(18, [protected, unprotected, payload, signature]).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded COSE_Sign1 bytes.
 	 */
@@ -132,7 +132,7 @@ final class COSE_Sign1_Builder {
 	 *   payload: bstr
 	 * ]
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded Sig_structure1.
 	 */
@@ -153,7 +153,7 @@ final class COSE_Sign1_Builder {
 	 * PHP's openssl_sign() returns DER-encoded ECDSA signatures. COSE requires
 	 * raw R||S format (64 bytes for P-256). This method handles the conversion.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $to_be_signed CBOR-encoded Sig_structure1.
 	 * @return string Raw signature bytes (R||S, 64 bytes).
@@ -181,7 +181,7 @@ final class COSE_Sign1_Builder {
 	 * COSE expects raw concatenated R and S as 32-byte big-endian unsigned
 	 * integers, zero-padded on the left.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $der_signature DER-encoded ECDSA signature.
 	 * @return string 64-byte R||S signature.
@@ -222,7 +222,7 @@ final class COSE_Sign1_Builder {
 	/**
 	 * Parses a DER INTEGER and returns the raw unsigned bytes.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $data   DER data.
 	 * @param int    $offset Current offset (modified by reference).
@@ -253,7 +253,7 @@ final class COSE_Sign1_Builder {
 	/**
 	 * Pads or trims an integer to exactly 32 bytes (P-256 field size).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $bytes Raw integer bytes.
 	 * @return string Exactly 32 bytes, left-padded with zeros.

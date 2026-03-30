@@ -26,29 +26,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Usage:
  *   wp_do_ability( 'c2pa/verify', [ 'text' => '...' ] )
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class C2PA_Verify extends Abstract_Ability {
 
 	/**
-	 * Constructor.
-	 *
-	 * @since 0.5.0
-	 */
-	public function __construct() {
-		parent::__construct(
-			'c2pa/verify',
-			array(
-				'label'       => __( 'C2PA: Verify Provenance', 'ai' ),
-				'description' => __( 'Extract and verify C2PA 2.3 cryptographic provenance from signed text content. Returns verification status and manifest details.', 'ai' ),
-			)
-		);
-	}
-
-	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The input schema of the ability.
 	 */
@@ -58,7 +43,7 @@ class C2PA_Verify extends Abstract_Ability {
 			'properties' => array(
 				'text' => array(
 					'type'              => 'string',
-					'sanitize_callback' => 'wp_kses_post',
+					'sanitize_callback' => 'sanitize_text_field',
 					'description'       => esc_html__( 'Signed text content to verify.', 'ai' ),
 				),
 			),
@@ -69,7 +54,7 @@ class C2PA_Verify extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The output schema of the ability.
 	 */
@@ -79,11 +64,12 @@ class C2PA_Verify extends Abstract_Ability {
 			'properties' => array(
 				'verified' => array(
 					'type'        => 'boolean',
-					'description' => esc_html__( 'Whether the content signature is valid.', 'ai' ),
+					'description' => esc_html__( 'Whether the content integrity check passed.', 'ai' ),
 				),
 				'status'   => array(
 					'type'        => 'string',
-					'description' => esc_html__( 'Verification status message.', 'ai' ),
+					'enum'        => array( 'verified', 'legacy_verified', 'unsigned', 'tampered', 'invalid' ),
+					'description' => esc_html__( 'Verification status.', 'ai' ),
 				),
 				'manifest' => array(
 					'type'        => array( 'object', 'null' ),
@@ -100,7 +86,7 @@ class C2PA_Verify extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param mixed $input The input arguments to the ability.
 	 * @return array{verified: bool, status: string, manifest: array<string,mixed>|null, error: string|null}|\WP_Error
@@ -125,7 +111,7 @@ class C2PA_Verify extends Abstract_Ability {
 	 *
 	 * Verification is public — no authentication required.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param mixed $input The input arguments to the ability.
 	 * @return bool Always true.
@@ -137,7 +123,7 @@ class C2PA_Verify extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The meta of the ability.
 	 */

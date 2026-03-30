@@ -27,29 +27,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * Returns the signed text (with embedded Unicode provenance) on success.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class C2PA_Sign extends Abstract_Ability {
 
 	/**
-	 * Constructor.
-	 *
-	 * @since 0.5.0
-	 */
-	public function __construct() {
-		parent::__construct(
-			'c2pa/sign',
-			array(
-				'label'       => __( 'C2PA: Sign Content', 'ai' ),
-				'description' => __( 'Embed C2PA 2.3 cryptographic provenance into text content. Returns signed text with invisible Unicode watermark.', 'ai' ),
-			)
-		);
-	}
-
-	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The input schema of the ability.
 	 */
@@ -59,8 +44,8 @@ class C2PA_Sign extends Abstract_Ability {
 			'properties' => array(
 				'text'     => array(
 					'type'              => 'string',
-					'sanitize_callback' => 'wp_kses_post',
-					'description'       => esc_html__( 'Plain text content to sign.', 'ai' ),
+					'sanitize_callback' => 'sanitize_text_field',
+					'description'       => esc_html__( 'Text content to sign.', 'ai' ),
 				),
 				'action'   => array(
 					'type'              => 'string',
@@ -70,6 +55,12 @@ class C2PA_Sign extends Abstract_Ability {
 				),
 				'metadata' => array(
 					'type'        => 'object',
+					'properties'  => array(
+						'title'   => array( 'type' => 'string' ),
+						'url'     => array( 'type' => 'string' ),
+						'author'  => array( 'type' => 'string' ),
+						'post_id' => array( 'type' => 'integer' ),
+					),
 					'description' => esc_html__( 'Post metadata: title, url, author, post_id.', 'ai' ),
 				),
 			),
@@ -80,7 +71,7 @@ class C2PA_Sign extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The output schema of the ability.
 	 */
@@ -94,11 +85,12 @@ class C2PA_Sign extends Abstract_Ability {
 				),
 				'manifest'    => array(
 					'type'        => 'string',
-					'description' => esc_html__( 'JSON manifest string.', 'ai' ),
+					'description' => esc_html__( 'JUMBF manifest store bytes.', 'ai' ),
 				),
 				'signer_tier' => array(
 					'type'        => 'string',
-					'description' => esc_html__( 'Signing tier: local, connected, or byok.', 'ai' ),
+					'enum'        => array( 'local', 'connected', 'byok' ),
+					'description' => esc_html__( 'Signing tier used.', 'ai' ),
 				),
 			),
 		);
@@ -107,7 +99,7 @@ class C2PA_Sign extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param mixed $input The input arguments to the ability.
 	 * @return array{signed_text: string, manifest: string, signer_tier: string}|\WP_Error
@@ -154,7 +146,7 @@ class C2PA_Sign extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param mixed $input The input arguments to the ability.
 	 * @return bool True if the user has permission.
@@ -166,7 +158,7 @@ class C2PA_Sign extends Abstract_Ability {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The meta of the ability.
 	 */
@@ -177,42 +169,42 @@ class C2PA_Sign extends Abstract_Ability {
 	/**
 	 * Attempt to get the Content_Provenance experiment instance from the registry.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return \WordPress\AI\Experiments\Content_Provenance\Content_Provenance|null
 	 */
 	private function get_experiment(): ?\WordPress\AI\Experiments\Content_Provenance\Content_Provenance {
-		// The experiment registry is not always accessible here; use a filter for loose coupling.
 		return apply_filters( 'wpai_content_provenance_experiment_instance', null );
 	}
 
 	/**
 	 * Build a fallback local signer using the stored keypair.
 	 *
-	 * @since 0.5.0
+	 * Generates a new EC P-256 keypair if none exists.
+	 *
+	 * @since x.x.x
 	 *
 	 * @return \WordPress\AI\Experiments\Content_Provenance\Signing\Local_Signer
 	 */
 	private function make_local_signer(): Local_Signer {
 		$keypair = get_option( '_c2pa_local_keypair', array() );
-		if ( empty( $keypair['private_key'] ) ) {
-			$res = openssl_pkey_new(
-				array(
-					'private_key_bits' => 2048,
-					'private_key_type' => OPENSSL_KEYTYPE_RSA,
-				)
-			);
-			if ( false !== $res ) {
-				openssl_pkey_export( $res, $private_key );
-				$details    = openssl_pkey_get_details( $res );
-				$public_key = is_array( $details ) ? ( $details['key'] ?? '' ) : '';
-				$keypair    = array(
-					'private_key' => $private_key,
-					'public_key'  => $public_key,
+
+		if ( ! is_array( $keypair ) || empty( $keypair['private_key'] ) || empty( $keypair['certificate_pem'] ) ) {
+			$keypair = Local_Signer::generate_keypair();
+
+			if ( is_wp_error( $keypair ) ) {
+				return new Local_Signer(
+					array(
+						'private_key'     => '',
+						'certificate_pem' => '',
+					)
 				);
-				update_option( '_c2pa_local_keypair', $keypair );
 			}
+
+			update_option( '_c2pa_local_keypair', $keypair, false );
 		}
+
+		/** @var array{private_key: string, certificate_pem: string} $keypair */
 		return new Local_Signer( $keypair );
 	}
 }

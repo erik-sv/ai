@@ -26,14 +26,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * Produces spec-compliant JUMBF manifest stores with COSE_Sign1 signatures.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class Local_Signer implements Signing_Interface {
 
 	/**
 	 * Keypair data containing private key PEM and certificate PEM.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 * @var array{private_key: string, certificate_pem: string}
 	 */
 	private array $keypair;
@@ -41,8 +41,7 @@ class Local_Signer implements Signing_Interface {
 	/**
 	 * Constructor.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Keypair now requires EC P-256 private key + X.509 certificate PEM.
+	 * @since x.x.x Keypair now requires EC P-256 private key + X.509 certificate PEM.
 	 *
 	 * @param array{private_key: string, certificate_pem: string} $keypair EC P-256 keypair with private_key and certificate_pem strings.
 	 */
@@ -55,8 +54,7 @@ class Local_Signer implements Signing_Interface {
 	 *
 	 * Builds a spec-compliant C2PA JUMBF manifest store with COSE_Sign1 signature.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Returns JUMBF binary instead of JSON.
+	 * @since x.x.x Returns JUMBF binary instead of JSON.
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).
@@ -118,7 +116,7 @@ class Local_Signer implements Signing_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return string Always 'local'.
 	 */
@@ -129,14 +127,15 @@ class Local_Signer implements Signing_Interface {
 	/**
 	 * Generates an EC P-256 keypair and self-signed X.509 certificate.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $common_name Certificate common name (defaults to site name).
 	 * @return array{private_key: string, certificate_pem: string}|\WP_Error Keypair or error.
 	 */
 	public static function generate_keypair( string $common_name = '' ) {
 		if ( empty( $common_name ) ) {
-			$common_name = function_exists( 'get_bloginfo' ) ? get_bloginfo( 'name' ) : 'WordPress C2PA Signer';
+			$blog_name   = get_bloginfo( 'name' );
+			$common_name = '' !== $blog_name ? $blog_name : 'WordPress C2PA Signer';
 		}
 
 		$key = openssl_pkey_new(
@@ -186,7 +185,7 @@ class Local_Signer implements Signing_Interface {
 	/**
 	 * Converts a PEM-encoded certificate to DER format.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $pem PEM-encoded certificate.
 	 * @return string DER bytes, or empty string on failure.

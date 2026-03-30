@@ -22,15 +22,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Signers return a JUMBF manifest store (binary bytes) containing a
  * COSE_Sign1-signed C2PA claim. The output is ready for Unicode embedding.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 interface Signing_Interface {
 
 	/**
 	 * Sign content and return the C2PA JUMBF manifest store bytes.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Returns JUMBF manifest store bytes instead of JSON.
+	 * @since x.x.x Returns JUMBF manifest store bytes instead of JSON.
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).
@@ -41,7 +40,7 @@ interface Signing_Interface {
 	/**
 	 * Returns the trust tier label for this signer.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return string 'local' | 'connected' | 'byok'
 	 */

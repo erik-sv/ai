@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * JUMBF box writer for C2PA manifest stores.
  *
- * @since 0.7.0
+ * @since x.x.x
  */
 final class JUMBF_Writer {
 
@@ -75,7 +75,7 @@ final class JUMBF_Writer {
 	/**
 	 * Writes a raw JUMBF box: 4-byte big-endian size + 4-byte type + content.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $box_type 4-byte ASCII box type (e.g. "jumb", "jumd", "cbor").
 	 * @param string $content  Box content bytes.
@@ -98,7 +98,7 @@ final class JUMBF_Writer {
 	 *
 	 * Contains: 16-byte UUID + 1-byte toggles + NUL-terminated label string.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $uuid    16-byte UUID identifying the box type.
 	 * @param string $label   Human-readable label (NUL-terminated in output).
@@ -113,7 +113,7 @@ final class JUMBF_Writer {
 	/**
 	 * Writes a JUMBF superbox (type "jumb"): description box + child boxes.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string          $uuid     16-byte UUID for the description box.
 	 * @param string          $label    Label for the description box.
@@ -136,7 +136,7 @@ final class JUMBF_Writer {
 	 *
 	 * Structure: jumb superbox → jumd (CBOR UUID + label) + cbor content box.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $label     Assertion label (e.g. "c2pa.hash.data").
 	 * @param string $cbor_data CBOR-encoded assertion content.
@@ -150,7 +150,7 @@ final class JUMBF_Writer {
 	/**
 	 * Builds the assertion store superbox from assertion label-to-CBOR pairs.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param array<string, string> $assertions Assertion label => CBOR bytes.
 	 * @return string Complete assertion store superbox bytes.
@@ -167,7 +167,7 @@ final class JUMBF_Writer {
 	/**
 	 * Builds the claim superbox wrapping CBOR claim bytes.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $claim_cbor CBOR-encoded claim.
 	 * @return string Complete claim superbox bytes.
@@ -180,7 +180,7 @@ final class JUMBF_Writer {
 	/**
 	 * Builds the signature superbox wrapping COSE_Sign1 bytes.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $cose_bytes COSE_Sign1 encoded bytes.
 	 * @return string Complete signature superbox bytes.
@@ -200,7 +200,7 @@ final class JUMBF_Writer {
 	 *     signature (c2cs)
 	 *   }
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string                $claim_cbor      CBOR-encoded claim.
 	 * @param array<string, string> $assertion_boxes  Assertion label => CBOR bytes.

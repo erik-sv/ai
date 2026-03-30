@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Minimal deterministic CBOR encoder.
  *
- * @since 0.7.0
+ * @since x.x.x
  */
 final class CBOR_Encoder {
 
@@ -29,7 +29,7 @@ final class CBOR_Encoder {
 	 * Dispatches on PHP type: int, string (as text), array, bool, null.
 	 * For byte strings (major type 2), use encode_byte_string() explicitly.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param mixed $value The value to encode.
 	 * @return string CBOR-encoded bytes.
@@ -68,7 +68,7 @@ final class CBOR_Encoder {
 	 * PHP has no native byte string type, so callers must use this method
 	 * explicitly when a CBOR byte string (not text string) is needed.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $bytes Raw bytes.
 	 * @return string CBOR-encoded byte string.
@@ -80,7 +80,7 @@ final class CBOR_Encoder {
 	/**
 	 * Encodes a tagged value (CBOR major type 6).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param int   $tag   Tag number (e.g. 18 for COSE_Sign1).
 	 * @param mixed $value The value to tag.
@@ -97,7 +97,7 @@ final class CBOR_Encoder {
 	 * then lexicographic comparison for equal-length encodings. Accepts
 	 * integer and string keys.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param array<int|string, mixed> $map Key-value pairs.
 	 * @return string CBOR-encoded map.
@@ -146,7 +146,7 @@ final class CBOR_Encoder {
 	/**
 	 * Encodes an unsigned integer (CBOR major type 0).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param int $value Non-negative integer.
 	 * @return string CBOR-encoded unsigned integer.
@@ -160,7 +160,7 @@ final class CBOR_Encoder {
 	 *
 	 * CBOR encodes negative integers as -1 - n, where n is the encoded value.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param int $value Negative integer.
 	 * @return string CBOR-encoded negative integer.
@@ -172,7 +172,7 @@ final class CBOR_Encoder {
 	/**
 	 * Encodes a text string (CBOR major type 3).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $text UTF-8 text string.
 	 * @return string CBOR-encoded text string.
@@ -184,7 +184,7 @@ final class CBOR_Encoder {
 	/**
 	 * Encodes a CBOR array (major type 4).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param array<int, mixed> $items Array items.
 	 * @return string CBOR-encoded array.
@@ -201,7 +201,7 @@ final class CBOR_Encoder {
 	/**
 	 * Encodes the CBOR initial byte(s) for a major type and argument.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param int $major_type CBOR major type (0-7).
 	 * @param int $argument   Non-negative integer argument.
@@ -232,7 +232,7 @@ final class CBOR_Encoder {
 	/**
 	 * Checks whether a PHP array has sequential integer keys starting from 0.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param array<mixed> $arr The array to check.
 	 * @return bool True if sequential, false otherwise.
@@ -252,7 +252,7 @@ final class CBOR_Encoder {
 	 * encode_byte_string, encode_tagged, etc.) should not be double-encoded.
 	 * This checks if the string looks like a CBOR byte string header.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $value The string to check.
 	 * @return bool True if this appears to be pre-encoded CBOR.

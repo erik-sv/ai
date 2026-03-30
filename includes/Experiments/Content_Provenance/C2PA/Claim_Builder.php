@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * C2PA 2.3 claim and assertion builder.
  *
- * @since 0.7.0
+ * @since x.x.x
  */
 final class Claim_Builder {
 
@@ -96,7 +96,7 @@ final class Claim_Builder {
 	/**
 	 * Constructor.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string               $content            Content text to sign.
 	 * @param string               $action             C2PA action type (e.g. "c2pa.created", "c2pa.edited").
@@ -115,7 +115,7 @@ final class Claim_Builder {
 	/**
 	 * Sets the IPTC digital source type for the actions assertion.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param string $type IPTC digital source type URI.
 	 */
@@ -130,7 +130,7 @@ final class Claim_Builder {
 	 * - "claim_cbor": CBOR-encoded claim map
 	 * - "assertion_map": array of assertion label => CBOR-encoded assertion bytes
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return array{claim_cbor: string, assertion_map: array<string, string>}
 	 */
@@ -147,7 +147,7 @@ final class Claim_Builder {
 	/**
 	 * Builds all C2PA assertions as CBOR.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return array<string, string> Assertion label => CBOR-encoded bytes.
 	 */
@@ -168,7 +168,7 @@ final class Claim_Builder {
 	/**
 	 * Builds the c2pa.actions.v2 assertion.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded assertion.
 	 */
@@ -188,7 +188,7 @@ final class Claim_Builder {
 	/**
 	 * Builds the c2pa.hash.data assertion with SHA-256 content hash.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded assertion.
 	 */
@@ -207,7 +207,7 @@ final class Claim_Builder {
 	/**
 	 * Builds the c2pa.soft_binding assertion for text embedding (Section A.7).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded assertion.
 	 */
@@ -227,7 +227,7 @@ final class Claim_Builder {
 	 * previous manifest to form a provenance chain. Verifiers can trace edits
 	 * back through the chain by following ingredient references.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded assertion.
 	 */
@@ -251,7 +251,7 @@ final class Claim_Builder {
 	/**
 	 * Builds the C2PA claim structure referencing assertion hashes.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @param array<string, string> $assertion_map Assertion label => CBOR bytes.
 	 * @return string CBOR-encoded claim map.
@@ -270,15 +270,17 @@ final class Claim_Builder {
 
 		$title = isset( $this->metadata['title'] ) ? (string) $this->metadata['title'] : '';
 
+		$plugin_version = self::get_plugin_version();
+
 		$claim = array(
 			'dc:title'           => $title,
 			'dc:format'          => 'text/plain',
 			'instanceID'         => $this->generate_instance_id(),
-			'claimGenerator'     => 'WordPress/AI c2pa-php/0.1.0',
+			'claimGenerator'     => 'WordPress/AI c2pa-php/' . $plugin_version,
 			'claimGeneratorInfo' => array(
 				array(
 					'name'    => 'WordPress AI Plugin',
-					'version' => '0.7.0',
+					'version' => $plugin_version,
 				),
 			),
 			'signature'          => 'self#jumbf=' . $this->manifest_label . '/c2pa.signature',
@@ -306,26 +308,37 @@ final class Claim_Builder {
 	/**
 	 * Generates a unique XMP-format instance ID.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string Instance ID in "xmp:iid:<UUID>" format.
 	 */
 	private function generate_instance_id(): string {
-		if ( function_exists( 'wp_generate_uuid4' ) ) {
-			return 'xmp:iid:' . wp_generate_uuid4();
+		return 'xmp:iid:' . wp_generate_uuid4();
+	}
+
+	/**
+	 * Reads the plugin version from the main plugin file header.
+	 *
+	 * @since x.x.x
+	 *
+	 * @return string Plugin version string, or '0.0.0' if unreadable.
+	 */
+	private static function get_plugin_version(): string {
+		static $version = null;
+
+		if ( null !== $version ) {
+			return $version;
 		}
 
-		// Fallback for non-WP contexts.
-		$bytes = random_bytes( 16 );
-		$hex   = bin2hex( $bytes );
+		$plugin_file = defined( 'WPAI_DIR' ) ? WPAI_DIR . '/ai.php' : '';
 
-		return 'xmp:iid:' . sprintf(
-			'%s-%s-%s-%s-%s',
-			substr( $hex, 0, 8 ),
-			substr( $hex, 8, 4 ),
-			substr( $hex, 12, 4 ),
-			substr( $hex, 16, 4 ),
-			substr( $hex, 20, 12 )
-		);
+		if ( '' !== $plugin_file && function_exists( 'get_plugin_data' ) ) {
+			$data    = get_plugin_data( $plugin_file, false, false );
+			$version = $data['Version'] ?? '0.0.0';
+		} else {
+			$version = '0.0.0';
+		}
+
+		return $version;
 	}
 }

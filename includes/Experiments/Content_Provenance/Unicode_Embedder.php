@@ -26,7 +26,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *   The 240 supplementary code points split into 4 groups of 64; the 3rd byte cycles
  *   through 0x84–0x87 and the 4th byte cycles through 0x80–0xBF.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class Unicode_Embedder {
 
@@ -35,7 +35,7 @@ class Unicode_Embedder {
 	 *
 	 * Used as a unique marker to detect whether a text carries embedded wrapper data.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	public const PREFIX = "\xEF\xBB\xBF";
@@ -45,7 +45,7 @@ class Unicode_Embedder {
 	 *
 	 * First 8 bytes of the C2PATextManifestWrapper header.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	private const WRAPPER_MAGIC = "\x43\x32\x50\x41\x54\x58\x54\x00";
@@ -53,7 +53,7 @@ class Unicode_Embedder {
 	/**
 	 * C2PATextManifestWrapper format version.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var int
 	 */
 	private const WRAPPER_VERSION = 1;
@@ -61,7 +61,7 @@ class Unicode_Embedder {
 	/**
 	 * Binary header size in bytes: 8 (magic) + 1 (version) + 4 (length).
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var int
 	 */
 	private const HEADER_SIZE = 13;
@@ -73,8 +73,7 @@ class Unicode_Embedder {
 	 * the magic header and manifest bytes, encodes the wrapper as Unicode variation
 	 * selectors (prefixed with U+FEFF), and APPENDS it to the normalized text.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Renamed parameter from $manifest_json to $manifest_bytes (accepts any binary payload).
+	 * @since x.x.x Renamed parameter from $manifest_json to $manifest_bytes (accepts any binary payload).
 	 *
 	 * @param string $text           Plain text content.
 	 * @param string $manifest_bytes Manifest bytes to embed (JUMBF binary or legacy JSON).
@@ -131,7 +130,7 @@ class Unicode_Embedder {
 	 *
 	 * Returns null if no valid wrapper is detected or if the header is invalid.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param string $text Text potentially containing an embedded wrapper.
 	 * @return string|null Extracted JSON string, or null if none found.
@@ -217,7 +216,7 @@ class Unicode_Embedder {
 	 * the remaining string equals the original human-readable content. Safe to call
 	 * on text that carries no embedding.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param string $text Text with possible embedded wrapper.
 	 * @return string Clean text without the C2PA wrapper.

@@ -28,14 +28,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * C2PA 2.3 text authentication specification (Section A.7). Proof survives
  * copy-paste, scraping, and syndication. Zero editorial workflow change.
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class Content_Provenance extends Abstract_Feature {
 
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public static function get_id(): string {
 		return 'content-provenance';
@@ -44,7 +44,7 @@ class Content_Provenance extends Abstract_Feature {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return array{label: string, description: string, category: string}
 	 */
@@ -63,7 +63,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Also hooks into the experiment-enabled toggle so the local keypair is
 	 * generated on first activation.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public function register(): void {
 		// Sign on first publication.
@@ -102,7 +102,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * All options are namespaced via get_field_option_name() and grouped under
 	 * the 'ai_experiments' settings group used by the experiments settings page.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public function register_settings(): void {
 		register_setting(
@@ -127,7 +127,7 @@ class Content_Provenance extends Abstract_Feature {
 			'ai_experiments',
 			$this->get_field_option_name( 'connected_service_api_key' ),
 			array(
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
 				'default'           => '',
 			)
 		);
@@ -136,7 +136,7 @@ class Content_Provenance extends Abstract_Feature {
 			'ai_experiments',
 			$this->get_field_option_name( 'byok_key_path' ),
 			array(
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => array( $this, 'sanitize_file_path' ),
 				'default'           => '',
 			)
 		);
@@ -145,7 +145,7 @@ class Content_Provenance extends Abstract_Feature {
 			'ai_experiments',
 			$this->get_field_option_name( 'byok_certificate' ),
 			array(
-				'sanitize_callback' => 'sanitize_text_field',
+				'sanitize_callback' => array( $this, 'sanitize_file_path' ),
 				'default'           => '',
 			)
 		);
@@ -184,14 +184,14 @@ class Content_Provenance extends Abstract_Feature {
 	 * Outputs signing-tier selection, conditional service configuration inputs,
 	 * badge display controls, and a short explanation of trust tiers per PRD §4.1.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public function render_settings_fields(): void {
 		$signing_tier_raw          = $this->get_signing_option( 'signing_tier' );
 		$signing_tier              = $signing_tier_raw ? (string) $signing_tier_raw : 'local';
 		$connected_service_url_raw = $this->get_signing_option( 'connected_service_url' );
 		$connected_service_url     = $connected_service_url_raw ? (string) $connected_service_url_raw : Connected_Signer::DEFAULT_SERVICE_URL;
-		$connected_service_api_key = (string) $this->get_signing_option( 'connected_service_api_key' );
+		$connected_service_api_key = self::decrypt_value( (string) $this->get_signing_option( 'connected_service_api_key' ) );
 		$byok_key_path             = (string) $this->get_signing_option( 'byok_key_path' );
 		$byok_certificate          = (string) $this->get_signing_option( 'byok_certificate' );
 		$auto_sign                 = (bool) $this->get_signing_option( 'auto_sign' );
@@ -284,13 +284,20 @@ class Content_Provenance extends Abstract_Feature {
 							</label>
 						</th>
 						<td>
+							<?php
+							$masked_key = '';
+							if ( '' !== $connected_service_api_key ) {
+								$masked_key = str_repeat( '*', max( 0, strlen( $connected_service_api_key ) - 4 ) ) . substr( $connected_service_api_key, -4 );
+							}
+							?>
 							<input
 								type="password"
 								id="<?php echo esc_attr( $tier_name_api_key ); ?>"
 								name="<?php echo esc_attr( $tier_name_api_key ); ?>"
-								value="<?php echo esc_attr( $connected_service_api_key ); ?>"
+								value="<?php echo esc_attr( $masked_key ); ?>"
 								class="regular-text"
 								autocomplete="new-password"
+								placeholder="<?php esc_attr_e( 'Enter API key', 'ai' ); ?>"
 							/>
 							<p class="description">
 								<?php
@@ -426,7 +433,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Hooked to 'publish_post' at priority 20 so it runs after standard WP
 	 * publish routines. Skips revisions and auto-drafts.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param int      $post_id The post ID.
 	 * @param \WP_Post $post    The post object.
@@ -453,7 +460,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Hooked to 'post_updated' at priority 20. Skips non-published posts and
 	 * updates that do not change the post content, to avoid churning signatures.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param int      $post_id     The post ID.
 	 * @param \WP_Post $post_after  The post object after the update.
@@ -483,7 +490,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Unicode variation selectors, and stores the result back to the post.
 	 * Failures are logged and stored in post meta — publication is never blocked.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param int           $post_id  Post ID.
 	 * @param \WP_Post      $post     Post object to sign.
@@ -564,7 +571,7 @@ class Content_Provenance extends Abstract_Feature {
 	 *
 	 * Hooked to 'wp_abilities_api_init'.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public function register_abilities(): void {
 		wp_register_ability(
@@ -593,7 +600,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * third-party tools can verify provenance without authentication. The
 	 * /status route requires edit_post capability for the requested post.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public function register_rest_routes(): void {
 		register_rest_route(
@@ -640,7 +647,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * response that includes verification status, the parsed manifest, and
 	 * any error detail.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param \WP_REST_Request $request The REST request object.
 	 * @return \WP_REST_Response
@@ -676,7 +683,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Reads post meta written by sign_post() and returns a summarised status
 	 * payload for use in the block editor sidebar panel.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param \WP_REST_Request $request The REST request object.
 	 * @return \WP_REST_Response
@@ -719,7 +726,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Only loads on the post edit and new-post screens. Passes runtime
 	 * configuration to the JS bundle via wp_localize_script.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 */
 	public function enqueue_assets(): void {
 		$screen = get_current_screen();
@@ -743,7 +750,7 @@ class Content_Provenance extends Abstract_Feature {
 				'nonce'       => wp_create_nonce( 'wp_rest' ),
 				'restUrl'     => rest_url( 'c2pa-provenance/v1' ),
 				'signerTier'  => ( $this->get_signing_option( 'signing_tier' ) ? (string) $this->get_signing_option( 'signing_tier' ) : 'local' ),
-				'settingsUrl' => admin_url( 'admin.php?page=ai-experiments' ),
+				'settingsUrl' => admin_url( 'admin.php?page=ai' ),
 			)
 		);
 	}
@@ -753,8 +760,7 @@ class Content_Provenance extends Abstract_Feature {
 	 *
 	 * Delegates to Well_Known_Handler for rewrite registration.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Delegates to Well_Known_Handler.
+	 * @since x.x.x Delegates to Well_Known_Handler.
 	 */
 	public function add_well_known_rewrite(): void {
 		Well_Known_Handler::add_rewrite_rule();
@@ -765,8 +771,7 @@ class Content_Provenance extends Abstract_Feature {
 	 *
 	 * Delegates to Well_Known_Handler for spec-compliant C2PA discovery.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Delegates to Well_Known_Handler with spec-compliant field names.
+	 * @since x.x.x Delegates to Well_Known_Handler with spec-compliant field names.
 	 */
 	public function handle_well_known_request(): void {
 		Well_Known_Handler::maybe_handle();
@@ -778,7 +783,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Generates the local keypair on first activation so it is available
 	 * immediately when the first post is published.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @param mixed $old_value The old option value.
 	 * @param mixed $new_value The new option value.
@@ -797,8 +802,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Uses EC P-256 with a self-signed X.509 certificate for C2PA compliance.
 	 * Called once on experiment activation.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Switched from RSA-2048 to EC P-256.
+	 * @since x.x.x Switched from RSA-2048 to EC P-256.
 	 */
 	public function ensure_local_keypair(): void {
 		$existing = get_option( '_c2pa_local_keypair' );
@@ -819,7 +823,7 @@ class Content_Provenance extends Abstract_Feature {
 	/**
 	 * Returns the configured signer for external callers (e.g. the c2pa/sign Ability).
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return \WordPress\AI\Experiments\Content_Provenance\Signing\Signing_Interface
 	 */
@@ -833,7 +837,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Reads the signing_tier option and instantiates the appropriate backend.
 	 * Defaults to Local_Signer when no tier is set.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return \WordPress\AI\Experiments\Content_Provenance\Signing\Signing_Interface
 	 */
@@ -842,9 +846,10 @@ class Content_Provenance extends Abstract_Feature {
 		$tier     = $raw_tier ? (string) $raw_tier : 'local';
 
 		if ( 'connected' === $tier ) {
+			$encrypted_key = (string) $this->get_signing_option( 'connected_service_api_key' );
 			return new Connected_Signer(
 				(string) $this->get_signing_option( 'connected_service_url' ),
-				(string) $this->get_signing_option( 'connected_service_api_key' )
+				self::decrypt_value( $encrypted_key )
 			);
 		}
 
@@ -859,12 +864,142 @@ class Content_Provenance extends Abstract_Feature {
 	}
 
 	/**
+	 * Sanitizes the API key setting, preserving the existing value when the
+	 * submitted value is the masked placeholder.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $value Submitted API key value.
+	 * @return string Sanitized API key.
+	 */
+	public function sanitize_api_key( string $value ): string {
+		$value = sanitize_text_field( $value );
+
+		// If the submitted value is all asterisks followed by up to 4 chars,
+		// the user did not change the key — keep the stored value.
+		if ( preg_match( '/^\*+.{0,4}$/', $value ) ) {
+			$stored = get_option( $this->get_field_option_name( 'connected_service_api_key' ), '' );
+			return is_string( $stored ) ? $stored : '';
+		}
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		return self::encrypt_value( $value );
+	}
+
+	/**
+	 * Sanitizes a BYOK file path, rejecting traversal attempts.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $value Submitted file path.
+	 * @return string Sanitized path, or empty string on failure.
+	 */
+	public function sanitize_file_path( string $value ): string {
+		$value = sanitize_text_field( $value );
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		// Reject paths with traversal sequences before resolving.
+		if ( false !== strpos( $value, '..' ) ) {
+			add_settings_error(
+				$this->get_field_option_name( 'byok_key_path' ),
+				'c2pa_path_traversal',
+				esc_html__( 'File path must not contain directory traversal sequences.', 'ai' )
+			);
+			return '';
+		}
+
+		return $value;
+	}
+
+	/**
 	 * Returns the value of an experiment setting option.
 	 *
 	 * Wraps get_option() with the namespaced option name produced by
 	 * get_field_option_name() to reduce boilerplate at call sites.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
+	 *
+	 * @param string $name Base option name (e.g. 'signing_tier').
+	 * @return mixed Option value, or false if not set.
+	 */
+	/**
+	 * Encrypts a value for at-rest storage using AES-256-CBC with the site auth key.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $value Plaintext value.
+	 * @return string Base64-encoded ciphertext with IV prefix, or original value on failure.
+	 */
+	private static function encrypt_value( string $value ): string {
+		if ( ! function_exists( 'openssl_encrypt' ) ) {
+			return $value;
+		}
+
+		$key = hash( 'sha256', wp_salt( 'auth' ), true );
+		$iv  = openssl_random_pseudo_bytes( 16 );
+
+		if ( false === $iv ) {
+			return $value;
+		}
+
+		$encrypted = openssl_encrypt( $value, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+
+		if ( false === $encrypted ) {
+			return $value;
+		}
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Encrypted binary data must be base64-encoded for safe storage.
+		return 'enc:' . base64_encode( $iv . $encrypted );
+	}
+
+	/**
+	 * Decrypts a value encrypted by encrypt_value().
+	 *
+	 * Returns the original string if the value is not encrypted (no 'enc:' prefix).
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $value Stored value (encrypted or plaintext).
+	 * @return string Decrypted plaintext.
+	 */
+	private static function decrypt_value( string $value ): string {
+		if ( 0 !== strpos( $value, 'enc:' ) ) {
+			return $value;
+		}
+
+		if ( ! function_exists( 'openssl_decrypt' ) ) {
+			return '';
+		}
+
+		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Decoding encrypted data stored by encrypt_value().
+		$raw = base64_decode( substr( $value, 4 ), true );
+
+		if ( false === $raw || strlen( $raw ) < 17 ) {
+			return '';
+		}
+
+		$key       = hash( 'sha256', wp_salt( 'auth' ), true );
+		$iv        = substr( $raw, 0, 16 );
+		$encrypted = substr( $raw, 16 );
+
+		$decrypted = openssl_decrypt( $encrypted, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv );
+
+		return false === $decrypted ? '' : $decrypted;
+	}
+
+	/**
+	 * Returns the value of an experiment setting option.
+	 *
+	 * Wraps get_option() with the namespaced option name produced by
+	 * get_field_option_name() to reduce boilerplate at call sites.
+	 *
+	 * @since x.x.x
 	 *
 	 * @param string $name Base option name (e.g. 'signing_tier').
 	 * @return mixed Option value, or false if not set.
@@ -880,8 +1015,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * If none exists or the stored keypair uses the legacy RSA format (missing
 	 * certificate_pem), generates a new EC P-256 keypair and persists it.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Returns EC P-256 keypair with certificate instead of RSA.
+	 * @since x.x.x Returns EC P-256 keypair with certificate instead of RSA.
 	 *
 	 * @return array{private_key: string, certificate_pem: string}
 	 */
@@ -911,8 +1045,7 @@ class Content_Provenance extends Abstract_Feature {
 	/**
 	 * Generates a fresh EC P-256 keypair with self-signed X.509 certificate.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Switched from RSA-2048 to EC P-256 with X.509 certificate for C2PA compliance.
+	 * @since x.x.x Switched from RSA-2048 to EC P-256 with X.509 certificate for C2PA compliance.
 	 *
 	 * @return array{private_key: string, certificate_pem: string}|\WP_Error Keypair array or WP_Error on failure.
 	 */

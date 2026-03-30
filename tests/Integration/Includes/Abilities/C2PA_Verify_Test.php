@@ -28,7 +28,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_execute_callback_returns_error_for_empty_text(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$result  = $this->invoke_execute( $ability, array( 'text' => '' ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -41,7 +41,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_execute_callback_returns_error_for_whitespace_text(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$result  = $this->invoke_execute( $ability, array( 'text' => '   ' ) );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -53,7 +53,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_execute_callback_returns_unsigned_for_plain_text(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$result  = $this->invoke_execute( $ability, array( 'text' => 'Plain text, no provenance.' ) );
 
 		$this->assertIsArray( $result );
@@ -78,7 +78,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 
 		$signed_text = Unicode_Embedder::embed( $content, $built['manifest'] );
 
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$result  = $this->invoke_execute( $ability, array( 'text' => $signed_text ) );
 
 		$this->assertIsArray( $result );
@@ -92,7 +92,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_execute_callback_handles_non_array_input(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$result  = $this->invoke_execute( $ability, null );
 
 		$this->assertInstanceOf( \WP_Error::class, $result );
@@ -104,7 +104,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_permission_callback_returns_true(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'permission_callback' );
 		$ref->setAccessible( true );
 
@@ -117,7 +117,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_input_schema_has_required_text(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'input_schema' );
 		$ref->setAccessible( true );
 		$schema = $ref->invoke( $ability );
@@ -131,7 +131,7 @@ class C2PA_Verify_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_output_schema_has_expected_properties(): void {
-		$ability = new C2PA_Verify();
+		$ability = new C2PA_Verify( 'c2pa/verify', array( 'label' => 'C2PA: Verify Provenance', 'description' => 'Verify C2PA provenance in text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'output_schema' );
 		$ref->setAccessible( true );
 		$schema = $ref->invoke( $ability );

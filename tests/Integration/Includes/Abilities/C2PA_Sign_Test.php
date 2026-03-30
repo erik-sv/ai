@@ -37,7 +37,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_ability_name(): void {
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$this->assertInstanceOf( C2PA_Sign::class, $ability );
 	}
 
@@ -50,7 +50,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 		$user_id = $this->factory->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $user_id );
 
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'execute_callback' );
 		$ref->setAccessible( true );
 		$result = $ref->invoke( $ability, array( 'text' => '' ) );
@@ -74,7 +74,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 		$this->assertIsArray( $keypair );
 		update_option( '_c2pa_local_keypair', $keypair );
 
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'execute_callback' );
 		$ref->setAccessible( true );
 		$result = $ref->invoke( $ability, array( 'text' => 'Content to sign.' ) );
@@ -92,7 +92,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_sign_non_array_input_returns_error(): void {
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'execute_callback' );
 		$ref->setAccessible( true );
 		$result = $ref->invoke( $ability, null );
@@ -108,7 +108,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	public function test_permission_callback_returns_false_for_unauthenticated(): void {
 		wp_set_current_user( 0 );
 
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'permission_callback' );
 		$ref->setAccessible( true );
 
@@ -124,7 +124,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 		$user_id = $this->factory->user->create( array( 'role' => 'editor' ) );
 		wp_set_current_user( $user_id );
 
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'permission_callback' );
 		$ref->setAccessible( true );
 
@@ -137,7 +137,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_input_schema_requires_text(): void {
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'input_schema' );
 		$ref->setAccessible( true );
 		$schema = $ref->invoke( $ability );
@@ -151,7 +151,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 	 * @since 0.5.0
 	 */
 	public function test_output_schema_has_expected_properties(): void {
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'output_schema' );
 		$ref->setAccessible( true );
 		$schema = $ref->invoke( $ability );
@@ -188,7 +188,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 			}
 		);
 
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'execute_callback' );
 		$ref->setAccessible( true );
 		$result = $ref->invoke( $ability, array( 'text' => 'Content via experiment signer.' ) );
@@ -245,7 +245,7 @@ class C2PA_Sign_Test extends WP_UnitTestCase {
 			}
 		);
 
-		$ability = new C2PA_Sign();
+		$ability = new C2PA_Sign( 'c2pa/sign', array( 'label' => 'C2PA: Sign Content', 'description' => 'Embed C2PA provenance into text content.' ) );
 		$ref     = new \ReflectionMethod( $ability, 'execute_callback' );
 		$ref->setAccessible( true );
 		$result = $ref->invoke( $ability, array( 'text' => 'Content to sign.' ) );

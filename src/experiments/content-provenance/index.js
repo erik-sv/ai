@@ -5,6 +5,8 @@ import { useState, useEffect, useCallback } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
+import { runAbility } from '../../utils/run-ability';
+import './style.scss';
 
 const data = window.aiContentProvenanceData || {};
 
@@ -14,38 +16,38 @@ const BADGE_CONFIG = {
 	verified: {
 		color: '#00a32a',
 		fill: '#d7f0de',
-		icon: '✓',
+		icon: '\u2713',
 		label: __( 'Signed — Identity Verified', 'ai' ),
 	},
 	local_signed: {
 		color: '#2271b1',
 		fill: '#e8f3fb',
-		icon: '◈',
+		icon: '\u25C8',
 		label: __( 'Signed — Content Integrity Verified', 'ai' ),
 	},
 	modified: {
 		color: '#dba617',
 		fill: '#fcf9e8',
-		icon: '⚠',
+		icon: '\u26A0',
 		label: __( 'Modified Since Signing', 'ai' ),
 	},
 	tampered: {
 		color: '#cc1818',
 		fill: '#fce8e8',
-		icon: '✗',
+		icon: '\u2717',
 		label: __( 'Tamper Detected', 'ai' ),
 	},
 	unsigned: {
 		color: '#8c8f94',
 		fill: '#f6f7f7',
-		icon: '○',
+		icon: '\u25CB',
 		label: __( 'Not Signed', 'ai' ),
 	},
 	loading: {
 		color: '#8c8f94',
 		fill: '#f6f7f7',
-		icon: '…',
-		label: __( 'Checking…', 'ai' ),
+		icon: '\u2026',
+		label: __( 'Checking\u2026', 'ai' ),
 	},
 };
 
@@ -53,17 +55,10 @@ const ShieldBadge = ( { status } ) => {
 	const cfg = BADGE_CONFIG[ status ] || BADGE_CONFIG.unsigned;
 	return (
 		<div
+			className="content-provenance-badge"
 			style={ {
-				display: 'flex',
-				alignItems: 'center',
-				gap: '8px',
-				padding: '10px 12px',
-				marginBottom: '12px',
 				background: cfg.fill,
-				border: `1px solid ${ cfg.color }`,
-				borderRadius: '4px',
-				width: '100%',
-				boxSizing: 'border-box',
+				'--badge-color': cfg.color,
 			} }
 		>
 			<svg
@@ -87,11 +82,8 @@ const ShieldBadge = ( { status } ) => {
 				) }
 			</svg>
 			<span
-				style={ {
-					fontSize: '13px',
-					fontWeight: '500',
-					color: cfg.color,
-				} }
+				className="content-provenance-badge__label"
+				style={ { color: cfg.color } }
 			>
 				{ cfg.label }
 			</span>
@@ -121,7 +113,7 @@ const TrustTierNotice = ( { tier, settingsUrl } ) => {
 					target="_blank"
 					rel="noopener noreferrer"
 				>
-					{ __( 'Connect a signing service →', 'ai' ) }
+					{ __( 'Connect a signing service \u2192', 'ai' ) }
 				</a>
 			) }
 		</Notice>
@@ -177,12 +169,7 @@ const ContentProvenancePanel = () => {
 		}
 		setIsSigning( true );
 		setError( '' );
-		apiFetch( {
-			path: `wp-abilities/v1/abilities/ai/content-provenance/run`,
-			method: 'POST',
-			headers: { 'X-WP-Nonce': data.nonce },
-			data: { post_id: postId },
-		} )
+		runAbility( 'c2pa/sign', { post_id: postId } )
 			.then( () => {
 				setIsSigning( false );
 				fetchStatus();
@@ -206,7 +193,6 @@ const ContentProvenancePanel = () => {
 			.then( ( res ) => {
 				setVerifyResult( res );
 				setIsVerifying( false );
-				// Update badge based on verification.
 				if ( res.status ) {
 					setStatus( res.status );
 				}
@@ -225,9 +211,9 @@ const ContentProvenancePanel = () => {
 				className="content-provenance-panel"
 				initialOpen={ false }
 			>
-				<p style={ { fontSize: '13px', color: '#646970' } }>
+				<p className="content-provenance-panel__disabled-text">
 					{ __(
-						'Enable the Content Provenance experiment in AI Experiments settings to add C2PA provenance to published content.',
+						'Enable the Content Provenance experiment in the AI plugin settings to add C2PA provenance to published content.',
 						'ai'
 					) }
 				</p>
@@ -236,13 +222,7 @@ const ContentProvenancePanel = () => {
 	}
 
 	const chainInfo = signedAt ? (
-		<p
-			style={ {
-				fontSize: '12px',
-				color: '#646970',
-				margin: '8px 0 0',
-			} }
-		>
+		<p className="content-provenance-panel__chain-info">
 			{ __( 'Last signed:', 'ai' ) } { signedAt }
 			{ signerTier && <> &middot; { signerTier }</> }
 		</p>
@@ -286,13 +266,7 @@ const ContentProvenancePanel = () => {
 						  ( verifyResult.status || 'unknown' ) }
 				</Notice>
 			) }
-			<div
-				style={ {
-					display: 'flex',
-					gap: '8px',
-					marginTop: '12px',
-				} }
-			>
+			<div className="content-provenance-panel__actions">
 				<Button
 					variant="primary"
 					isSmall

@@ -25,14 +25,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * the experiment settings. This tier offers the highest trust level since the
  * certificate can be issued by a C2PA trust list CA (SSL.com, DigiCert, etc.).
  *
- * @since 0.5.0
+ * @since x.x.x
  */
 class BYOK_Signer implements Signing_Interface {
 
 	/**
 	 * Filesystem path to the PEM-encoded private key.
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	private string $key_path;
@@ -40,7 +40,7 @@ class BYOK_Signer implements Signing_Interface {
 	/**
 	 * Filesystem path to the PEM-encoded X.509 certificate (chain).
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 * @var string
 	 */
 	private string $cert_path;
@@ -48,8 +48,7 @@ class BYOK_Signer implements Signing_Interface {
 	/**
 	 * Constructor.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Now accepts separate key and certificate paths.
+	 * @since x.x.x Now accepts separate key and certificate paths.
 	 *
 	 * @param string $key_path  Filesystem path to a PEM-encoded private key file.
 	 * @param string $cert_path Filesystem path to a PEM-encoded certificate file.
@@ -65,8 +64,7 @@ class BYOK_Signer implements Signing_Interface {
 	 * Loads the publisher's private key and certificate, builds a spec-compliant
 	 * C2PA JUMBF manifest store with COSE_Sign1 signature.
 	 *
-	 * @since 0.5.0
-	 * @since 0.7.0 Returns JUMBF binary instead of JSON.
+	 * @since x.x.x Returns JUMBF binary instead of JSON.
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).
@@ -80,14 +78,20 @@ class BYOK_Signer implements Signing_Interface {
 			);
 		}
 
-		if ( ! is_readable( $this->key_path ) ) {
+		$safe_key_path = self::validate_file_path( $this->key_path );
+
+		if ( is_wp_error( $safe_key_path ) ) {
+			return $safe_key_path;
+		}
+
+		if ( ! is_readable( $safe_key_path ) ) {
 			return new \WP_Error(
 				'c2pa_byok_cert_unreadable',
 				esc_html__( 'BYOK private key file is not readable. Check the path and permissions.', 'ai' )
 			);
 		}
 
-		$private_key_pem = file_get_contents( $this->key_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reading local PEM key file.
+		$private_key_pem = file_get_contents( $safe_key_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reading local PEM key file.
 
 		if ( false === $private_key_pem ) {
 			return new \WP_Error(
@@ -152,7 +156,7 @@ class BYOK_Signer implements Signing_Interface {
 	/**
 	 * {@inheritDoc}
 	 *
-	 * @since 0.5.0
+	 * @since x.x.x
 	 *
 	 * @return string Always 'byok'.
 	 */
@@ -163,7 +167,7 @@ class BYOK_Signer implements Signing_Interface {
 	/**
 	 * Loads the certificate from the configured path and returns DER bytes.
 	 *
-	 * @since 0.7.0
+	 * @since x.x.x
 	 *
 	 * @return string|\WP_Error DER certificate bytes or WP_Error.
 	 */
@@ -175,14 +179,20 @@ class BYOK_Signer implements Signing_Interface {
 			);
 		}
 
-		if ( ! is_readable( $this->cert_path ) ) {
+		$safe_cert_path = self::validate_file_path( $this->cert_path );
+
+		if ( is_wp_error( $safe_cert_path ) ) {
+			return $safe_cert_path;
+		}
+
+		if ( ! is_readable( $safe_cert_path ) ) {
 			return new \WP_Error(
 				'c2pa_byok_cert_file_unreadable',
 				esc_html__( 'BYOK certificate file is not readable.', 'ai' )
 			);
 		}
 
-		$cert_pem = file_get_contents( $this->cert_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reading local PEM certificate file.
+		$cert_pem = file_get_contents( $safe_cert_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- Reading local PEM certificate file.
 
 		if ( false === $cert_pem ) {
 			return new \WP_Error(
@@ -201,5 +211,44 @@ class BYOK_Signer implements Signing_Interface {
 		}
 
 		return $der;
+	}
+
+	/**
+	 * Validates a file path to prevent path traversal attacks.
+	 *
+	 * Resolves the real path and ensures it falls within ABSPATH or WP_CONTENT_DIR.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $path File path to validate.
+	 * @return string|\WP_Error Resolved real path, or WP_Error if path is unsafe.
+	 */
+	private static function validate_file_path( string $path ) {
+		$real_path = realpath( $path );
+
+		if ( false === $real_path ) {
+			return new \WP_Error(
+				'c2pa_byok_path_invalid',
+				esc_html__( 'BYOK file path does not exist or cannot be resolved.', 'ai' )
+			);
+		}
+
+		$allowed_roots = array(
+			realpath( ABSPATH ),
+			defined( 'WP_CONTENT_DIR' ) ? realpath( WP_CONTENT_DIR ) : null,
+		);
+
+		$allowed_roots = array_filter( $allowed_roots );
+
+		foreach ( $allowed_roots as $root ) {
+			if ( 0 === strpos( $real_path, $root . DIRECTORY_SEPARATOR ) ) {
+				return $real_path;
+			}
+		}
+
+		return new \WP_Error(
+			'c2pa_byok_path_traversal',
+			esc_html__( 'BYOK file path must be within the WordPress installation directory.', 'ai' )
+		);
 	}
 }
