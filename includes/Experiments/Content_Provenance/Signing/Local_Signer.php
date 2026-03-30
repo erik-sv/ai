@@ -54,7 +54,7 @@ class Local_Signer implements Signing_Interface {
 	/**
 	 * Constructor.
 	 *
-	 * @since x.x.x Keypair now requires EC P-256 private key + X.509 certificate PEM.
+	 * @since x.x.x
 	 *
 	 * @param array{private_key: string, certificate_pem: string} $keypair EC P-256 keypair with private_key and certificate_pem strings.
 	 */
@@ -67,7 +67,7 @@ class Local_Signer implements Signing_Interface {
 	 *
 	 * Builds a spec-compliant C2PA JUMBF manifest store with COSE_Sign1 signature.
 	 *
-	 * @since x.x.x Returns JUMBF binary instead of JSON.
+	 * @since x.x.x
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).

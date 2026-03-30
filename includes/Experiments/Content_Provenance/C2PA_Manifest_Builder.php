@@ -53,7 +53,7 @@ class C2PA_Manifest_Builder {
 	 * Delegates to the signer backend, which produces JUMBF manifest store
 	 * bytes containing CBOR-encoded claims and a COSE_Sign1 signature.
 	 *
-	 * @since x.x.x Returns JUMBF binary instead of JSON manifest.
+	 * @since x.x.x
 	 *
 	 * @param string                                                                     $content           Plain text content.
 	 * @param string                                                                     $action            'c2pa.created' or 'c2pa.edited'.
@@ -98,7 +98,7 @@ class C2PA_Manifest_Builder {
 	 * Supports both the new JUMBF binary format and legacy JSON format
 	 * for backwards compatibility with previously signed content.
 	 *
-	 * @since x.x.x Added JUMBF binary format support with legacy JSON fallback.
+	 * @since x.x.x
 	 *
 	 * @param string $text Text that may contain embedded Unicode provenance.
 	 * @return array{verified: bool, status: string, manifest: array<string, mixed>|null, error: string|null}

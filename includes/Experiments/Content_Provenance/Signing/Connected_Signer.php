@@ -68,7 +68,7 @@ class Connected_Signer implements Signing_Interface {
 	 * POSTs content and metadata to the signing service. The service builds
 	 * a spec-compliant C2PA JUMBF manifest store and returns it base64-encoded.
 	 *
-	 * @since x.x.x Returns JUMBF binary instead of JSON.
+	 * @since x.x.x
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).

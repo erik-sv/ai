@@ -70,7 +70,7 @@ class Well_Known_Handler {
 	 *
 	 * Uses spec-compliant field names per C2PA 2.3.
 	 *
-	 * @since x.x.x Updated to use C2PA spec-compliant field names.
+	 * @since x.x.x
 	 *
 	 * @return array<string, mixed> The discovery document.
 	 */

@@ -6,7 +6,7 @@ import { useSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
 import { __ } from '@wordpress/i18n';
 import { runAbility } from '../../utils/run-ability';
-import './style.scss';
+import './index.scss';
 
 const data = window.aiContentProvenanceData || {};
 
@@ -101,7 +101,7 @@ const TrustTierNotice = ( { tier, settingsUrl } ) => {
 		<Notice
 			status="info"
 			isDismissible={ false }
-			style={ { marginBottom: '12px' } }
+			className="content-provenance-panel__trust-tier-notice"
 		>
 			{ __(
 				'Signed with local key. Content integrity is verifiable but signer identity is not on the C2PA Trust List.',
@@ -144,8 +144,7 @@ const ContentProvenancePanel = () => {
 		}
 		setStatus( 'loading' );
 		apiFetch( {
-			url: `${ data.restUrl }/status?post_id=${ postId }`,
-			headers: { 'X-WP-Nonce': data.nonce },
+			path: `c2pa-provenance/v1/status?post_id=${ postId }`,
 		} )
 			.then( ( res ) => {
 				setStatus( res.status || 'unsigned' );
@@ -187,8 +186,7 @@ const ContentProvenancePanel = () => {
 		setIsVerifying( true );
 		setVerifyResult( null );
 		apiFetch( {
-			url: `${ data.restUrl }/status?post_id=${ postId }`,
-			headers: { 'X-WP-Nonce': data.nonce },
+			path: `c2pa-provenance/v1/status?post_id=${ postId }`,
 		} )
 			.then( ( res ) => {
 				setVerifyResult( res );
@@ -245,7 +243,7 @@ const ContentProvenancePanel = () => {
 				<Notice
 					status="error"
 					isDismissible={ false }
-					style={ { marginTop: '8px' } }
+					className="content-provenance-panel__notice"
 				>
 					{ error }
 				</Notice>
@@ -255,7 +253,7 @@ const ContentProvenancePanel = () => {
 					status={ verifyResult.verified ? 'success' : 'warning' }
 					isDismissible
 					onRemove={ () => setVerifyResult( null ) }
-					style={ { marginTop: '8px' } }
+					className="content-provenance-panel__notice"
 				>
 					{ verifyResult.verified
 						? __(

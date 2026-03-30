@@ -73,7 +73,7 @@ class Unicode_Embedder {
 	 * the magic header and manifest bytes, encodes the wrapper as Unicode variation
 	 * selectors (prefixed with U+FEFF), and APPENDS it to the normalized text.
 	 *
-	 * @since x.x.x Renamed parameter from $manifest_json to $manifest_bytes (accepts any binary payload).
+	 * @since x.x.x
 	 *
 	 * @param string $text           Plain text content.
 	 * @param string $manifest_bytes Manifest bytes to embed (JUMBF binary or legacy JSON).

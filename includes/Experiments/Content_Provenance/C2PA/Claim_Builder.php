@@ -384,12 +384,15 @@ final class Claim_Builder {
 
 		$plugin_file = defined( 'WPAI_DIR' ) ? WPAI_DIR . '/ai.php' : '';
 
-		if ( '' !== $plugin_file && function_exists( 'get_plugin_data' ) ) {
-			$data    = get_plugin_data( $plugin_file, false, false );
-			$version = $data['Version'] ?? '0.0.0';
-		} else {
+		if ( '' === $plugin_file ) {
 			$version = '0.0.0';
+			return $version;
 		}
+
+		require_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+		$data    = get_plugin_data( $plugin_file, false, false );
+		$version = $data['Version'] ?? '0.0.0';
 
 		return $version;
 	}

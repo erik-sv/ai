@@ -57,7 +57,7 @@ class BYOK_Signer implements Signing_Interface {
 	/**
 	 * Constructor.
 	 *
-	 * @since x.x.x Now accepts separate key and certificate paths.
+	 * @since x.x.x
 	 *
 	 * @param string $key_path  Filesystem path to a PEM-encoded private key file.
 	 * @param string $cert_path Filesystem path to a PEM-encoded certificate file.
@@ -73,7 +73,7 @@ class BYOK_Signer implements Signing_Interface {
 	 * Loads the publisher's private key and certificate, builds a spec-compliant
 	 * C2PA JUMBF manifest store with COSE_Sign1 signature.
 	 *
-	 * @since x.x.x Returns JUMBF binary instead of JSON.
+	 * @since x.x.x
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).

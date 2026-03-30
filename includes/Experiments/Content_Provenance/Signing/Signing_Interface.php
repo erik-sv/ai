@@ -29,7 +29,7 @@ interface Signing_Interface {
 	/**
 	 * Sign content and return the C2PA JUMBF manifest store bytes.
 	 *
-	 * @since x.x.x Returns JUMBF manifest store bytes instead of JSON.
+	 * @since x.x.x
 	 *
 	 * @param string               $content  Plain text content to sign.
 	 * @param array<string, mixed> $metadata Post metadata (title, post_id, etc.).

@@ -747,8 +747,6 @@ class Content_Provenance extends Abstract_Feature {
 			'ContentProvenanceData',
 			array(
 				'enabled'     => $this->is_enabled(),
-				'nonce'       => wp_create_nonce( 'wp_rest' ),
-				'restUrl'     => rest_url( 'c2pa-provenance/v1' ),
 				'signerTier'  => ( $this->get_signing_option( 'signing_tier' ) ? (string) $this->get_signing_option( 'signing_tier' ) : 'local' ),
 				'settingsUrl' => admin_url( 'admin.php?page=ai' ),
 			)
@@ -760,7 +758,7 @@ class Content_Provenance extends Abstract_Feature {
 	 *
 	 * Delegates to Well_Known_Handler for rewrite registration.
 	 *
-	 * @since x.x.x Delegates to Well_Known_Handler.
+	 * @since x.x.x
 	 */
 	public function add_well_known_rewrite(): void {
 		Well_Known_Handler::add_rewrite_rule();
@@ -771,7 +769,7 @@ class Content_Provenance extends Abstract_Feature {
 	 *
 	 * Delegates to Well_Known_Handler for spec-compliant C2PA discovery.
 	 *
-	 * @since x.x.x Delegates to Well_Known_Handler with spec-compliant field names.
+	 * @since x.x.x
 	 */
 	public function handle_well_known_request(): void {
 		Well_Known_Handler::maybe_handle();
@@ -802,7 +800,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * Uses EC P-256 with a self-signed X.509 certificate for C2PA compliance.
 	 * Called once on experiment activation.
 	 *
-	 * @since x.x.x Switched from RSA-2048 to EC P-256.
+	 * @since x.x.x
 	 */
 	public function ensure_local_keypair(): void {
 		$existing = get_option( '_c2pa_local_keypair' );
@@ -1015,7 +1013,7 @@ class Content_Provenance extends Abstract_Feature {
 	 * If none exists or the stored keypair uses the legacy RSA format (missing
 	 * certificate_pem), generates a new EC P-256 keypair and persists it.
 	 *
-	 * @since x.x.x Returns EC P-256 keypair with certificate instead of RSA.
+	 * @since x.x.x
 	 *
 	 * @return array{private_key: string, certificate_pem: string}
 	 */
@@ -1045,7 +1043,7 @@ class Content_Provenance extends Abstract_Feature {
 	/**
 	 * Generates a fresh EC P-256 keypair with self-signed X.509 certificate.
 	 *
-	 * @since x.x.x Switched from RSA-2048 to EC P-256 with X.509 certificate for C2PA compliance.
+	 * @since x.x.x
 	 *
 	 * @return array{private_key: string, certificate_pem: string}|\WP_Error Keypair array or WP_Error on failure.
 	 */
