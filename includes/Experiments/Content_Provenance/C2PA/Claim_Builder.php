@@ -188,17 +188,21 @@ final class Claim_Builder {
 	/**
 	 * Builds the c2pa.hash.data assertion with SHA-256 content hash.
 	 *
+	 * Per C2PA 2.3 data-hash-map CDDL, required fields are `hash` (bstr)
+	 * and `pad` (zero-filled bstr). The hash covers NFC-normalized UTF-8
+	 * text with the manifest wrapper excluded.
+	 *
 	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded assertion.
 	 */
 	private function build_hash_data_assertion(): string {
-		$hash_bytes = hash( 'sha256', $this->content, true );
+		$normalized = self::nfc_normalize( $this->content );
+		$hash_bytes = hash( 'sha256', $normalized, true );
 
 		$assertion = array(
-			'name'      => 'sha256',
-			'hash'      => CBOR_Encoder::encode_byte_string( $hash_bytes ),
-			'pad_start' => 0,
+			'hash' => CBOR_Encoder::encode_byte_string( $hash_bytes ),
+			'pad'  => CBOR_Encoder::encode_byte_string( str_repeat( "\x00", 32 ) ),
 		);
 
 		return CBOR_Encoder::encode( $assertion );
@@ -212,9 +216,11 @@ final class Claim_Builder {
 	 * @return string CBOR-encoded assertion.
 	 */
 	private function build_soft_binding_assertion(): string {
+		$normalized = self::nfc_normalize( $this->content );
+
 		$assertion = array(
 			'alg'             => 'c2pa.text.vs16',
-			'document_length' => mb_strlen( $this->content, 'UTF-8' ),
+			'document_length' => mb_strlen( $normalized, 'UTF-8' ),
 		);
 
 		return CBOR_Encoder::encode( $assertion );
@@ -255,6 +261,9 @@ final class Claim_Builder {
 	 * `assertions`), `claim_generator_info` (not `claimGenerator`), and
 	 * no `dc:format`. See C2PA 2.3 Section 10 for the claim structure.
 	 *
+	 * Per the spec, hashed URI references hash the JUMBF superbox content
+	 * (description box + content boxes, excluding the superbox header).
+	 *
 	 * @since x.x.x
 	 *
 	 * @param array<string, string> $assertion_map Assertion label => CBOR bytes.
@@ -263,9 +272,14 @@ final class Claim_Builder {
 	private function build_claim( array $assertion_map ): string {
 		$assertion_refs = array();
 		foreach ( $assertion_map as $label => $cbor_bytes ) {
+			// Build the JUMBF assertion box and hash its content (everything
+			// after the 8-byte superbox header) per C2PA Hashing JUMBF Boxes.
+			$jumbf_box     = JUMBF_Writer::build_assertion_box( $label, $cbor_bytes );
+			$jumbf_content = substr( $jumbf_box, 8 );
+
 			$assertion_refs[] = array(
 				'url'  => 'self#jumbf=' . $this->manifest_label . '/c2pa.assertions/' . $label,
-				'hash' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $cbor_bytes, true ) ),
+				'hash' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $jumbf_content, true ) ),
 				'alg'  => 'sha256',
 			);
 		}
@@ -290,6 +304,28 @@ final class Claim_Builder {
 		}
 
 		return CBOR_Encoder::encode( $claim );
+	}
+
+	/**
+	 * Normalizes a string to Unicode NFC form.
+	 *
+	 * Falls back to the original string when the intl extension is not available.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $text Input text.
+	 * @return string NFC-normalized text.
+	 */
+	private static function nfc_normalize( string $text ): string {
+		if ( class_exists( 'Normalizer' ) ) {
+			$normalized = \Normalizer::normalize( $text, \Normalizer::FORM_C );
+
+			if ( false !== $normalized ) {
+				return $normalized;
+			}
+		}
+
+		return $text;
 	}
 
 	/**

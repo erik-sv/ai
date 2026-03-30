@@ -200,9 +200,18 @@ class C2PA_Manifest_Builder {
 			);
 		}
 
-		// Content hash verification: compute hash of stripped text and check
-		// that it appears in the JUMBF bytes (inside the c2pa.hash.data assertion).
-		$plain_text   = Unicode_Embedder::strip( $text );
+		// Content hash verification: NFC-normalize and hash the stripped text,
+		// then check it appears in the JUMBF bytes (c2pa.hash.data assertion).
+		$plain_text = Unicode_Embedder::strip( $text );
+
+		if ( class_exists( 'Normalizer' ) ) {
+			$normalized = \Normalizer::normalize( $plain_text, \Normalizer::FORM_C );
+
+			if ( false !== $normalized ) {
+				$plain_text = $normalized;
+			}
+		}
+
 		$content_hash = hash( 'sha256', $plain_text, true );
 
 		if ( false === strpos( $jumbf_bytes, $content_hash ) ) {
