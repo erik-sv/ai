@@ -94,6 +94,20 @@ final class Claim_Builder {
 	private string $digital_source_type = 'http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia';
 
 	/**
+	 * Exclusion start byte offset in the NFC-normalized UTF-8 text, or null.
+	 *
+	 * @var int|null
+	 */
+	private ?int $exclusion_start = null;
+
+	/**
+	 * Exclusion byte length of the VS-encoded wrapper, or null.
+	 *
+	 * @var int|null
+	 */
+	private ?int $exclusion_length = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @since x.x.x
@@ -121,6 +135,23 @@ final class Claim_Builder {
 	 */
 	public function set_digital_source_type( string $type ): void {
 		$this->digital_source_type = $type;
+	}
+
+	/**
+	 * Sets the exclusion range for the c2pa.hash.data assertion.
+	 *
+	 * The exclusion range identifies the byte offset and length of the
+	 * C2PATextManifestWrapper in the NFC-normalized UTF-8 text. Verifiers
+	 * use this to locate and remove the wrapper before hashing.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param int $start  Byte offset where the wrapper begins in NFC-normalized UTF-8 text.
+	 * @param int $length Byte length of the VS-encoded wrapper.
+	 */
+	public function set_exclusions( int $start, int $length ): void {
+		$this->exclusion_start  = $start;
+		$this->exclusion_length = $length;
 	}
 
 	/**
@@ -204,6 +235,15 @@ final class Claim_Builder {
 			'hash' => CBOR_Encoder::encode_byte_string( $hash_bytes ),
 			'pad'  => CBOR_Encoder::encode_byte_string( str_repeat( "\x00", 32 ) ),
 		);
+
+		if ( null !== $this->exclusion_start && null !== $this->exclusion_length ) {
+			$assertion['exclusions'] = array(
+				array(
+					'start'  => $this->exclusion_start,
+					'length' => $this->exclusion_length,
+				),
+			);
+		}
 
 		return CBOR_Encoder::encode( $assertion );
 	}

@@ -12,6 +12,7 @@ namespace WordPress\AI\Experiments\Content_Provenance\Signing;
 use WordPress\AI\Experiments\Content_Provenance\C2PA\COSE_Sign1_Builder;
 use WordPress\AI\Experiments\Content_Provenance\C2PA\Claim_Builder;
 use WordPress\AI\Experiments\Content_Provenance\C2PA\JUMBF_Writer;
+use WordPress\AI\Experiments\Content_Provenance\Unicode_Embedder;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -28,6 +29,14 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since x.x.x
  */
 class BYOK_Signer implements Signing_Interface {
+
+	/**
+	 * Maximum number of signing passes to converge on an exclusion length.
+	 *
+	 * @since x.x.x
+	 * @var int
+	 */
+	private const MAX_EXCLUSION_PASSES = 20;
 
 	/**
 	 * Filesystem path to the PEM-encoded private key.
@@ -117,40 +126,57 @@ class BYOK_Signer implements Signing_Interface {
 			return $certificate_der;
 		}
 
-		$manifest_label = 'urn:uuid:' . wp_generate_uuid4();
-
-		// Step 1: Build assertions and claim.
+		$manifest_label    = 'urn:uuid:' . wp_generate_uuid4();
 		$action            = isset( $metadata['action'] ) ? (string) $metadata['action'] : 'c2pa.created';
 		$previous_manifest = isset( $metadata['previous_manifest'] ) ? (string) $metadata['previous_manifest'] : null;
-		$claim_builder     = new Claim_Builder( $content, $action, $metadata, $manifest_label, $previous_manifest );
-		$claim_result      = $claim_builder->build();
 
-		// Step 2: Build COSE_Sign1 signature.
-		try {
-			$cose_builder = new COSE_Sign1_Builder(
-				$private_key_pem,
-				$certificate_der,
-				$claim_result['claim_cbor']
+		// Compute the exclusion start offset: byte length of NFC-normalized content.
+		$exclusion_start = strlen( self::nfc_normalize( $content ) );
+
+		// Iterative build with exclusion convergence (see Local_Signer for details).
+		$exclusion_length = null;
+		$jumbf            = '';
+
+		for ( $pass = 0; $pass <= self::MAX_EXCLUSION_PASSES; $pass++ ) {
+			$claim_builder = new Claim_Builder( $content, $action, $metadata, $manifest_label, $previous_manifest );
+
+			if ( null !== $exclusion_length ) {
+				$claim_builder->set_exclusions( $exclusion_start, $exclusion_length );
+			}
+
+			$claim_result = $claim_builder->build();
+
+			try {
+				$cose_builder = new COSE_Sign1_Builder( $private_key_pem, $certificate_der, $claim_result['claim_cbor'] );
+				$cose_sign1   = $cose_builder->build();
+			} catch ( \RuntimeException $e ) {
+				return new \WP_Error(
+					'c2pa_byok_sign_failed',
+					sprintf(
+						/* translators: %s: Error message from the signing operation. */
+						esc_html__( 'BYOK C2PA signing failed: %s', 'ai' ),
+						esc_html( $e->getMessage() )
+					)
+				);
+			}
+
+			$jumbf = JUMBF_Writer::build_manifest_store(
+				$claim_result['claim_cbor'],
+				$claim_result['assertion_map'],
+				$cose_sign1,
+				$manifest_label
 			);
-			$cose_sign1   = $cose_builder->build();
-		} catch ( \RuntimeException $e ) {
-			return new \WP_Error(
-				'c2pa_byok_sign_failed',
-				sprintf(
-					/* translators: %s: Error message from the signing operation. */
-					esc_html__( 'BYOK C2PA signing failed: %s', 'ai' ),
-					esc_html( $e->getMessage() )
-				)
-			);
+
+			$actual_length = Unicode_Embedder::compute_wrapper_byte_length( $jumbf );
+
+			if ( $actual_length === $exclusion_length ) {
+				return $jumbf;
+			}
+
+			$exclusion_length = $actual_length;
 		}
 
-		// Step 3: Assemble JUMBF manifest store.
-		return JUMBF_Writer::build_manifest_store(
-			$claim_result['claim_cbor'],
-			$claim_result['assertion_map'],
-			$cose_sign1,
-			$manifest_label
-		);
+		return $jumbf;
 	}
 
 	/**
@@ -162,6 +188,26 @@ class BYOK_Signer implements Signing_Interface {
 	 */
 	public function get_tier(): string {
 		return 'byok';
+	}
+
+	/**
+	 * Normalizes a string to Unicode NFC form.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $text Input text.
+	 * @return string NFC-normalized text, or original if intl extension unavailable.
+	 */
+	private static function nfc_normalize( string $text ): string {
+		if ( class_exists( 'Normalizer' ) ) {
+			$normalized = \Normalizer::normalize( $text, \Normalizer::FORM_C );
+
+			if ( false !== $normalized ) {
+				return $normalized;
+			}
+		}
+
+		return $text;
 	}
 
 	/**

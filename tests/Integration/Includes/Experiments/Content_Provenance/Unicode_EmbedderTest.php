@@ -172,6 +172,56 @@ class Unicode_EmbedderTest extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that compute_wrapper_byte_length returns correct count for empty manifest.
+	 *
+	 * @since x.x.x
+	 */
+	public function test_compute_wrapper_byte_length_empty_manifest(): void {
+		$length = Unicode_Embedder::compute_wrapper_byte_length( '' );
+
+		// BOM: 3 bytes.
+		// Header bytes: C(0x43) 2(0x32) P(0x50) A(0x41) T(0x54) X(0x58) T(0x54) \0(0x00) = 7*4 + 1*3 = 31.
+		// Version 0x01: 3 bytes. Length 0x00000000: 4*3 = 12.
+		// Total: 3 + 31 + 3 + 12 = 49.
+		$this->assertSame( 49, $length );
+	}
+
+	/**
+	 * Test that compute_wrapper_byte_length matches actual embed() output size.
+	 *
+	 * @since x.x.x
+	 */
+	public function test_compute_wrapper_byte_length_matches_embed(): void {
+		$content  = 'Hello, World!';
+		$manifest = str_repeat( "\xFF", 50 );
+
+		$embedded       = Unicode_Embedder::embed( $content, $manifest );
+		$actual_wrapper = strlen( $embedded ) - strlen( $content );
+		$computed       = Unicode_Embedder::compute_wrapper_byte_length( $manifest );
+
+		$this->assertSame( $actual_wrapper, $computed );
+	}
+
+	/**
+	 * Test that compute_wrapper_byte_length handles mixed byte values correctly.
+	 *
+	 * @since x.x.x
+	 */
+	public function test_compute_wrapper_byte_length_mixed_bytes(): void {
+		// Manifest with bytes spanning both VS ranges (< 16 and >= 16).
+		$manifest = '';
+		for ( $i = 0; $i < 32; $i++ ) {
+			$manifest .= chr( $i * 8 ); // 0, 8, 16, 24, ..., 248.
+		}
+
+		$embedded       = Unicode_Embedder::embed( 'Test.', $manifest );
+		$actual_wrapper = strlen( $embedded ) - strlen( 'Test.' );
+		$computed       = Unicode_Embedder::compute_wrapper_byte_length( $manifest );
+
+		$this->assertSame( $actual_wrapper, $computed );
+	}
+
+	/**
 	 * Build a VS-encoded string with U+FEFF prefix from raw byte values.
 	 *
 	 * Mirrors the encoding logic in Unicode_Embedder::embed() for test construction.

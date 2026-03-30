@@ -12,6 +12,7 @@ namespace WordPress\AI\Experiments\Content_Provenance\Signing;
 use WordPress\AI\Experiments\Content_Provenance\C2PA\COSE_Sign1_Builder;
 use WordPress\AI\Experiments\Content_Provenance\C2PA\Claim_Builder;
 use WordPress\AI\Experiments\Content_Provenance\C2PA\JUMBF_Writer;
+use WordPress\AI\Experiments\Content_Provenance\Unicode_Embedder;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -29,6 +30,18 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since x.x.x
  */
 class Local_Signer implements Signing_Interface {
+
+	/**
+	 * Maximum number of signing passes to converge on an exclusion length.
+	 *
+	 * The ECDSA signature introduces random byte values, so the VS-encoded
+	 * wrapper byte count may vary slightly between passes. This caps the
+	 * iteration to prevent unbounded retries.
+	 *
+	 * @since x.x.x
+	 * @var int
+	 */
+	private const MAX_EXCLUSION_PASSES = 20;
 
 	/**
 	 * Keypair data containing private key PEM and certificate PEM.
@@ -77,40 +90,62 @@ class Local_Signer implements Signing_Interface {
 			);
 		}
 
-		$manifest_label = 'urn:uuid:' . wp_generate_uuid4();
-
-		// Step 1: Build assertions and claim.
+		$manifest_label    = 'urn:uuid:' . wp_generate_uuid4();
 		$action            = isset( $metadata['action'] ) ? (string) $metadata['action'] : 'c2pa.created';
 		$previous_manifest = isset( $metadata['previous_manifest'] ) ? (string) $metadata['previous_manifest'] : null;
-		$claim_builder     = new Claim_Builder( $content, $action, $metadata, $manifest_label, $previous_manifest );
-		$claim_result      = $claim_builder->build();
+		$private_key       = $this->keypair['private_key'];
 
-		// Step 2: Build COSE_Sign1 signature over the claim.
-		try {
-			$cose_builder = new COSE_Sign1_Builder(
-				$this->keypair['private_key'],
-				$certificate_der,
-				$claim_result['claim_cbor']
+		// Compute the exclusion start offset: byte length of NFC-normalized content.
+		$nfc_content     = self::nfc_normalize( $content );
+		$exclusion_start = strlen( $nfc_content );
+
+		// Iterative build: each pass signs with the declared exclusion length,
+		// then checks if the actual VS-encoded wrapper matches. The signature
+		// introduces randomness in the byte values, so the wrapper byte count
+		// may vary slightly between passes. Typically converges in 1-3 passes.
+		$exclusion_length = null;
+		$jumbf            = '';
+
+		for ( $pass = 0; $pass <= self::MAX_EXCLUSION_PASSES; $pass++ ) {
+			$claim_builder = new Claim_Builder( $content, $action, $metadata, $manifest_label, $previous_manifest );
+
+			if ( null !== $exclusion_length ) {
+				$claim_builder->set_exclusions( $exclusion_start, $exclusion_length );
+			}
+
+			$claim_result = $claim_builder->build();
+
+			try {
+				$cose_builder = new COSE_Sign1_Builder( $private_key, $certificate_der, $claim_result['claim_cbor'] );
+				$cose_sign1   = $cose_builder->build();
+			} catch ( \RuntimeException $e ) {
+				return new \WP_Error(
+					'c2pa_sign_failed',
+					sprintf(
+						/* translators: %s: Error message from the signing operation. */
+						esc_html__( 'C2PA signing failed: %s', 'ai' ),
+						esc_html( $e->getMessage() )
+					)
+				);
+			}
+
+			$jumbf = JUMBF_Writer::build_manifest_store(
+				$claim_result['claim_cbor'],
+				$claim_result['assertion_map'],
+				$cose_sign1,
+				$manifest_label
 			);
-			$cose_sign1   = $cose_builder->build();
-		} catch ( \RuntimeException $e ) {
-			return new \WP_Error(
-				'c2pa_sign_failed',
-				sprintf(
-					/* translators: %s: Error message from the signing operation. */
-					esc_html__( 'C2PA signing failed: %s', 'ai' ),
-					esc_html( $e->getMessage() )
-				)
-			);
+
+			$actual_length = Unicode_Embedder::compute_wrapper_byte_length( $jumbf );
+
+			if ( $actual_length === $exclusion_length ) {
+				return $jumbf;
+			}
+
+			$exclusion_length = $actual_length;
 		}
 
-		// Step 3: Assemble JUMBF manifest store.
-		return JUMBF_Writer::build_manifest_store(
-			$claim_result['claim_cbor'],
-			$claim_result['assertion_map'],
-			$cose_sign1,
-			$manifest_label
-		);
+		return $jumbf;
 	}
 
 	/**
@@ -122,6 +157,26 @@ class Local_Signer implements Signing_Interface {
 	 */
 	public function get_tier(): string {
 		return 'local';
+	}
+
+	/**
+	 * Normalizes a string to Unicode NFC form.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $text Input text.
+	 * @return string NFC-normalized text, or original if intl extension unavailable.
+	 */
+	private static function nfc_normalize( string $text ): string {
+		if ( class_exists( 'Normalizer' ) ) {
+			$normalized = \Normalizer::normalize( $text, \Normalizer::FORM_C );
+
+			if ( false !== $normalized ) {
+				return $normalized;
+			}
+		}
+
+		return $text;
 	}
 
 	/**

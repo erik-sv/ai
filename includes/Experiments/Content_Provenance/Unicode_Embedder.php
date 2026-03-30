@@ -210,6 +210,44 @@ class Unicode_Embedder {
 	}
 
 	/**
+	 * Computes the UTF-8 byte length of the VS-encoded wrapper for given manifest bytes.
+	 *
+	 * Used to calculate the `exclusions` field in the c2pa.hash.data assertion.
+	 * The wrapper consists of:
+	 * - 3 bytes for U+FEFF BOM prefix
+	 * - VS-encoded header (13 bytes: magic + version + 4-byte big-endian length)
+	 * - VS-encoded manifest bytes
+	 *
+	 * Each source byte encodes to 3 UTF-8 bytes (if < 16) or 4 UTF-8 bytes (if >= 16).
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $manifest_bytes Raw manifest bytes.
+	 * @return int Total UTF-8 byte length of the encoded wrapper.
+	 */
+	public static function compute_wrapper_byte_length( string $manifest_bytes ): int {
+		$length = strlen( self::PREFIX ); // 3 bytes for U+FEFF.
+
+		// Build the same header that embed() builds.
+		$manifest_len = strlen( $manifest_bytes );
+		$header       = self::WRAPPER_MAGIC
+			. chr( self::WRAPPER_VERSION )
+			. pack( 'N', $manifest_len );
+
+		// Count VS encoding size for each header byte.
+		for ( $i = 0, $hlen = strlen( $header ); $i < $hlen; $i++ ) {
+			$length += ord( $header[ $i ] ) < 16 ? 3 : 4;
+		}
+
+		// Count VS encoding size for each manifest byte.
+		for ( $i = 0; $i < $manifest_len; $i++ ) {
+			$length += ord( $manifest_bytes[ $i ] ) < 16 ? 3 : 4;
+		}
+
+		return $length;
+	}
+
+	/**
 	 * Strip embedded variation selectors from text, returning clean plain text.
 	 *
 	 * Removes U+FEFF and all variation-selector byte sequences (VS1–VS256) so that

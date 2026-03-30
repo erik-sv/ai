@@ -327,4 +327,78 @@ class Claim_BuilderTest extends WP_UnitTestCase {
 			'Empty string previous manifest should not produce ingredient assertion.'
 		);
 	}
+
+	/**
+	 * Test that hash.data assertion has no exclusions by default.
+	 */
+	public function test_hash_data_has_no_exclusions_by_default(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$result  = $builder->build();
+
+		$hash_data = $result['assertion_map'][ Claim_Builder::ASSERTION_HASH_DATA ];
+		$this->assertStringNotContainsString(
+			'exclusions',
+			$hash_data,
+			'Hash data assertion should not contain exclusions by default.'
+		);
+	}
+
+	/**
+	 * Test that hash.data assertion contains exclusions when set.
+	 */
+	public function test_hash_data_contains_exclusions_when_set(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$builder->set_exclusions( 100, 500 );
+		$result = $builder->build();
+
+		$hash_data = $result['assertion_map'][ Claim_Builder::ASSERTION_HASH_DATA ];
+		$this->assertStringContainsString( 'exclusions', $hash_data, 'Hash data should contain exclusions field.' );
+		$this->assertStringContainsString( 'start', $hash_data, 'Exclusion range should contain start field.' );
+		$this->assertStringContainsString( 'length', $hash_data, 'Exclusion range should contain length field.' );
+	}
+
+	/**
+	 * Test that exclusions do not change the content hash in hash.data assertion.
+	 */
+	public function test_exclusions_do_not_affect_content_hash(): void {
+		$content       = 'Test content for hashing.';
+		$expected_hash = hash( 'sha256', $content, true );
+
+		$builder_no_excl = new Claim_Builder( $content, 'c2pa.created', array(), 'urn:uuid:test' );
+		$result_no_excl  = $builder_no_excl->build();
+
+		$builder_with_excl = new Claim_Builder( $content, 'c2pa.created', array(), 'urn:uuid:test' );
+		$builder_with_excl->set_exclusions( 25, 3000 );
+		$result_with_excl = $builder_with_excl->build();
+
+		$this->assertStringContainsString(
+			$expected_hash,
+			$result_no_excl['assertion_map'][ Claim_Builder::ASSERTION_HASH_DATA ],
+			'Hash should be present without exclusions.'
+		);
+		$this->assertStringContainsString(
+			$expected_hash,
+			$result_with_excl['assertion_map'][ Claim_Builder::ASSERTION_HASH_DATA ],
+			'Hash should be present with exclusions.'
+		);
+	}
+
+	/**
+	 * Test that different exclusion values produce different assertion CBOR.
+	 */
+	public function test_different_exclusions_produce_different_assertions(): void {
+		$builder1 = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$builder1->set_exclusions( 100, 500 );
+		$result1 = $builder1->build();
+
+		$builder2 = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$builder2->set_exclusions( 200, 600 );
+		$result2 = $builder2->build();
+
+		$this->assertNotSame(
+			$result1['assertion_map'][ Claim_Builder::ASSERTION_HASH_DATA ],
+			$result2['assertion_map'][ Claim_Builder::ASSERTION_HASH_DATA ],
+			'Different exclusion values should produce different hash data assertions.'
+		);
+	}
 }
