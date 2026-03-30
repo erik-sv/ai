@@ -249,7 +249,11 @@ final class Claim_Builder {
 	}
 
 	/**
-	 * Builds the C2PA claim structure referencing assertion hashes.
+	 * Builds the C2PA v2 claim structure referencing assertion hashes.
+	 *
+	 * Produces a claim map with v2 field names: `created_assertions` (not
+	 * `assertions`), `claim_generator_info` (not `claimGenerator`), and
+	 * no `dc:format`. See C2PA 2.3 Section 10 for the claim structure.
 	 *
 	 * @since x.x.x
 	 *
@@ -261,59 +265,31 @@ final class Claim_Builder {
 		foreach ( $assertion_map as $label => $cbor_bytes ) {
 			$assertion_refs[] = array(
 				'url'  => 'self#jumbf=' . $this->manifest_label . '/c2pa.assertions/' . $label,
-				'hash' => array(
-					'name'  => 'sha256',
-					'value' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $cbor_bytes, true ) ),
-				),
+				'hash' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $cbor_bytes, true ) ),
+				'alg'  => 'sha256',
 			);
 		}
-
-		$title = isset( $this->metadata['title'] ) ? (string) $this->metadata['title'] : '';
 
 		$plugin_version = self::get_plugin_version();
 
 		$claim = array(
-			'dc:title'           => $title,
-			'dc:format'          => 'text/plain',
-			'instanceID'         => $this->generate_instance_id(),
-			'claimGenerator'     => 'WordPress/AI c2pa-php/' . $plugin_version,
-			'claimGeneratorInfo' => array(
-				array(
-					'name'    => 'WordPress AI Plugin',
-					'version' => $plugin_version,
-				),
+			'instanceID'           => 'urn:uuid:' . wp_generate_uuid4(),
+			'claim_generator_info' => array(
+				'name'    => 'WordPress AI Plugin',
+				'version' => $plugin_version,
 			),
-			'signature'          => 'self#jumbf=' . $this->manifest_label . '/c2pa.signature',
-			'assertions'         => $assertion_refs,
+			'signature'            => 'self#jumbf=' . $this->manifest_label . '/c2pa.signature',
+			'created_assertions'   => $assertion_refs,
+			'alg'                  => 'sha256',
 		);
 
-		// Add ingredients array when there is a previous manifest in the chain.
-		if ( null !== $this->previous_manifest && '' !== $this->previous_manifest ) {
-			$ingredient_url       = 'self#jumbf=' . $this->manifest_label . '/c2pa.assertions/' . self::ASSERTION_INGREDIENT;
-			$ingredient_cbor      = $assertion_map[ self::ASSERTION_INGREDIENT ] ?? '';
-			$claim['ingredients'] = array(
-				array(
-					'url'  => $ingredient_url,
-					'hash' => array(
-						'name'  => 'sha256',
-						'value' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $ingredient_cbor, true ) ),
-					),
-				),
-			);
+		$title = isset( $this->metadata['title'] ) ? (string) $this->metadata['title'] : '';
+
+		if ( '' !== $title ) {
+			$claim['dc:title'] = $title;
 		}
 
 		return CBOR_Encoder::encode( $claim );
-	}
-
-	/**
-	 * Generates a unique XMP-format instance ID.
-	 *
-	 * @since x.x.x
-	 *
-	 * @return string Instance ID in "xmp:iid:<UUID>" format.
-	 */
-	private function generate_instance_id(): string {
-		return 'xmp:iid:' . wp_generate_uuid4();
 	}
 
 	/**

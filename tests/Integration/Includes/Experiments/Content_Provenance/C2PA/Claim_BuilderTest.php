@@ -146,17 +146,63 @@ class Claim_BuilderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that claim contains claimGenerator string.
+	 * Test that claim contains claim_generator_info name.
 	 */
-	public function test_claim_contains_generator(): void {
+	public function test_claim_contains_generator_info(): void {
 		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
 		$result  = $builder->build();
 
 		$this->assertStringContainsString(
-			'WordPress/AI',
+			'WordPress AI Plugin',
 			$result['claim_cbor'],
-			'Claim should contain WordPress/AI in claim generator.'
+			'Claim should contain generator name in claim_generator_info.'
 		);
+	}
+
+	/**
+	 * Test that claim uses v2 structure: created_assertions, no v1 fields.
+	 */
+	public function test_claim_uses_v2_structure(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array( 'title' => 'My Post' ), 'urn:uuid:test' );
+		$result  = $builder->build();
+		$cbor    = $result['claim_cbor'];
+
+		// v2 fields must be present.
+		$this->assertStringContainsString( 'created_assertions', $cbor, 'Claim must use created_assertions (v2).' );
+		$this->assertStringContainsString( 'claim_generator_info', $cbor, 'Claim must use claim_generator_info (v2).' );
+		$this->assertStringContainsString( 'instanceID', $cbor, 'Claim must contain instanceID.' );
+
+		// v1-only fields must be absent.
+		$this->assertStringNotContainsString( 'claimGenerator', $cbor, 'Claim must not contain v1 claimGenerator string.' );
+		$this->assertStringNotContainsString( 'dc:format', $cbor, 'Claim must not contain v1 dc:format.' );
+	}
+
+	/**
+	 * Test that dc:title is conditionally included only when non-empty.
+	 */
+	public function test_claim_omits_empty_title(): void {
+		$builder_no_title = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$result_no_title  = $builder_no_title->build();
+
+		$builder_with_title = new Claim_Builder( 'Test.', 'c2pa.created', array( 'title' => 'Present' ), 'urn:uuid:test' );
+		$result_with_title  = $builder_with_title->build();
+
+		$this->assertStringNotContainsString( 'dc:title', $result_no_title['claim_cbor'], 'Empty title should not appear in claim.' );
+		$this->assertStringContainsString( 'dc:title', $result_with_title['claim_cbor'], 'Non-empty title should appear in claim.' );
+	}
+
+	/**
+	 * Test that assertion references in created_assertions include alg field.
+	 */
+	public function test_assertion_references_include_alg(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$result  = $builder->build();
+		$cbor    = $result['claim_cbor'];
+
+		// The alg field ("sha256") should appear in assertion references.
+		// Count occurrences: top-level alg + one per assertion reference (3 assertions).
+		$count = substr_count( $cbor, 'sha256' );
+		$this->assertGreaterThanOrEqual( 4, $count, 'Expected alg field in claim and each assertion reference.' );
 	}
 
 	/**
@@ -251,9 +297,9 @@ class Claim_BuilderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that claim contains ingredients reference when previous manifest exists.
+	 * Test that claim references ingredient assertion in created_assertions.
 	 */
-	public function test_claim_contains_ingredients_with_previous_manifest(): void {
+	public function test_claim_references_ingredient_in_created_assertions(): void {
 		$previous = 'some-previous-manifest';
 		$label    = 'urn:uuid:chain-test';
 		$builder  = new Claim_Builder( 'Test.', 'c2pa.edited', array(), $label, $previous );
