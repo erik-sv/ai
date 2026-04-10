@@ -35,7 +35,7 @@ class Connected_SignerTest extends WP_UnitTestCase {
 	 * @since 0.7.0
 	 */
 	public function test_default_service_url_constant(): void {
-		$this->assertSame( 'https://api.encypher.com/v1/c2pa/sign', Connected_Signer::DEFAULT_SERVICE_URL );
+		$this->assertSame( 'https://api.encypher.com/v1/sign', Connected_Signer::DEFAULT_SERVICE_URL );
 	}
 
 	/**

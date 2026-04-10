@@ -1,6 +1,6 @@
 <?php
 /**
- * Connected signing backend via Encypher API.
+ * Connected signing backend via CA-verified provider.
  *
  * @package WordPress\AI
  */
@@ -14,24 +14,37 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Signs C2PA manifests via the Encypher signing service.
+ * Signs C2PA manifests via a CA-verified signing provider.
  *
- * Delegates signing to the Encypher API endpoint. The service holds a
+ * Delegates signing to an external API endpoint whose operator holds a
  * CA-issued certificate on the C2PA trust list, producing manifests that
- * standard verifiers recognise as trusted. Pre-populated with the Encypher
- * API URL by default — publishers just need a free API key to start signing.
+ * standard verifiers recognise as trusted. Any compatible provider can be
+ * used; see KNOWN_PROVIDERS for a maintained list.
  *
  * @since x.x.x
  */
 class Connected_Signer implements Signing_Interface {
 
 	/**
-	 * Default Encypher API signing endpoint.
+	 * Known compatible signing services and their endpoints.
+	 *
+	 * @since x.x.x
+	 * @var array<string, array{url: string, name: string}>
+	 */
+	public const KNOWN_PROVIDERS = array(
+		'encypher' => array(
+			'url'  => 'https://api.encypher.com/v1/sign',
+			'name' => 'Encypher',
+		),
+	);
+
+	/**
+	 * Default signing service endpoint.
 	 *
 	 * @since x.x.x
 	 * @var string
 	 */
-	public const DEFAULT_SERVICE_URL = 'https://api.encypher.com/v1/c2pa/sign';
+	public const DEFAULT_SERVICE_URL = 'https://api.encypher.com/v1/sign';
 
 	/**
 	 * Remote signing service URL.

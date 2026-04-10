@@ -679,57 +679,63 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that render_settings_fields() outputs the settings fieldset HTML.
+	 * Test that get_settings_fields() returns the expected field definitions.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_render_settings_fields_outputs_fieldset(): void {
+	public function test_get_settings_fields_returns_expected_fields(): void {
 		$experiment = new Content_Provenance();
-		ob_start();
-		$experiment->render_settings_fields();
-		$output = ob_get_clean();
+		$fields     = $experiment->get_settings_fields();
 
-		$this->assertStringContainsString( 'ai-experiment-content-provenance-settings', $output );
-		$this->assertStringContainsString( 'wpai_feature_content-provenance_field_signing_tier', $output );
-		$this->assertStringContainsString( 'wpai_feature_content-provenance_field_auto_sign', $output );
+		$ids = array_column( $fields, 'id' );
+		$this->assertContains( 'signing_tier', $ids );
+		$this->assertContains( 'auto_sign', $ids );
+		$this->assertContains( 'show_badge', $ids );
+		$this->assertContains( 'badge_position', $ids );
+		$this->assertContains( 'connected_service_url', $ids );
+		$this->assertContains( 'connected_service_api_key', $ids );
+		$this->assertContains( 'byok_key_path', $ids );
+		$this->assertContains( 'byok_certificate', $ids );
 	}
 
 	/**
-	 * Test that render_settings_fields() marks the connected section open when tier is connected.
+	 * Test that get_settings_fields() signing_tier has correct elements.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_render_settings_fields_shows_connected_tier_open(): void {
-		update_option( 'wpai_feature_content-provenance_field_signing_tier', 'connected' );
-
+	public function test_get_settings_fields_signing_tier_elements(): void {
 		$experiment = new Content_Provenance();
-		ob_start();
-		$experiment->render_settings_fields();
-		$output = ob_get_clean();
+		$fields     = $experiment->get_settings_fields();
 
-		// The <details> element for connected should have the 'open' attribute.
-		$this->assertMatchesRegularExpression( '/<details[^>]*open[^>]*>/', $output );
+		$tier_field = null;
+		foreach ( $fields as $field ) {
+			if ( 'signing_tier' === $field['id'] ) {
+				$tier_field = $field;
+				break;
+			}
+		}
 
-		delete_option( 'wpai_feature_content-provenance_field_signing_tier' );
+		$this->assertNotNull( $tier_field );
+		$this->assertArrayHasKey( 'elements', $tier_field );
+
+		$values = array_column( $tier_field['elements'], 'value' );
+		$this->assertContains( 'local', $values );
+		$this->assertContains( 'connected', $values );
+		$this->assertContains( 'byok', $values );
 	}
 
 	/**
-	 * Test that render_settings_fields() marks the byok section open when tier is byok.
+	 * Test that get_settings_fields_metadata() resolves full option names.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_render_settings_fields_shows_byok_tier_open(): void {
-		update_option( 'wpai_feature_content-provenance_field_signing_tier', 'byok' );
-
+	public function test_get_settings_fields_metadata_resolves_option_names(): void {
 		$experiment = new Content_Provenance();
-		ob_start();
-		$experiment->render_settings_fields();
-		$output = ob_get_clean();
+		$metadata   = $experiment->get_settings_fields_metadata();
 
-		$this->assertStringContainsString( 'byok_certificate', $output );
-		$this->assertMatchesRegularExpression( '/<details[^>]*open[^>]*>/', $output );
-
-		delete_option( 'wpai_feature_content-provenance_field_signing_tier' );
+		$ids = array_column( $metadata, 'id' );
+		$this->assertContains( 'wpai_feature_content-provenance_field_signing_tier', $ids );
+		$this->assertContains( 'wpai_feature_content-provenance_field_show_badge', $ids );
 	}
 
 	/**

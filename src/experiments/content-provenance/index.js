@@ -1,10 +1,13 @@
 import { registerPlugin } from '@wordpress/plugins';
-import { PluginDocumentSettingPanel } from '@wordpress/edit-post';
+import {
+	PluginDocumentSettingPanel,
+	store as editorStore,
+} from '@wordpress/editor';
 import { Button, Spinner, Notice } from '@wordpress/components';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
 import apiFetch from '@wordpress/api-fetch';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 import { runAbility } from '../../utils/run-ability';
 import './index.scss';
 
@@ -93,38 +96,42 @@ const ShieldBadge = ( { status } ) => {
 
 // ── Trust tier notice ────────────────────────────────────────────────────────
 
-const TrustTierNotice = ( { tier, settingsUrl } ) => {
-	if ( 'local' !== tier ) {
+const TIER_LABELS = {
+	local: __( 'local key', 'ai' ),
+	connected: __( 'CA-verified provider', 'ai' ),
+	byok: __( 'publisher certificate', 'ai' ),
+};
+
+const TrustTierNotice = ( { tier, status } ) => {
+	if ( 'loading' === status ) {
 		return null;
 	}
-	return (
-		<Notice
-			status="info"
-			isDismissible={ false }
-			className="content-provenance-panel__trust-tier-notice"
-		>
-			{ __(
-				'Signed with local key. Content integrity is verifiable but signer identity is not on the C2PA Trust List.',
-				'ai'
-			) }
-			{ settingsUrl && (
-				<a
-					href={ settingsUrl }
-					target="_blank"
-					rel="noopener noreferrer"
-				>
-					{ __( 'Connect a signing service \u2192', 'ai' ) }
-				</a>
-			) }
-		</Notice>
-	);
+
+	const tierLabel = TIER_LABELS[ tier ] || TIER_LABELS.local;
+
+	if ( 'unsigned' === status ) {
+		return (
+			<p className="content-provenance-panel__tier-info">
+				{ sprintf(
+					/* translators: %s: signing tier label (e.g. "local key") */
+					__( 'Will be signed with %s.', 'ai' ),
+					tierLabel
+				) }
+			</p>
+		);
+	}
+
+	return null;
 };
 
 // ── Main panel ───────────────────────────────────────────────────────────────
 
 const ContentProvenancePanel = () => {
-	const postId = useSelect(
-		( select ) => select( 'core/editor' ).getCurrentPostId(),
+	const { postId, postContent } = useSelect(
+		( select ) => ( {
+			postId: select( 'core/editor' ).getCurrentPostId(),
+			postContent: select( editorStore ).getEditedPostContent(),
+		} ),
 		[]
 	);
 
@@ -185,9 +192,7 @@ const ContentProvenancePanel = () => {
 		}
 		setIsVerifying( true );
 		setVerifyResult( null );
-		apiFetch( {
-			path: `c2pa-provenance/v1/status?post_id=${ postId }`,
-		} )
+		runAbility( 'c2pa/verify', { text: postContent } )
 			.then( ( res ) => {
 				setVerifyResult( res );
 				setIsVerifying( false );
@@ -234,10 +239,7 @@ const ContentProvenancePanel = () => {
 			initialOpen={ true }
 		>
 			<ShieldBadge status={ status === 'loading' ? 'loading' : status } />
-			<TrustTierNotice
-				tier={ signerTier }
-				settingsUrl={ data.settingsUrl }
-			/>
+			<TrustTierNotice tier={ signerTier } status={ status } />
 			{ chainInfo }
 			{ error && (
 				<Notice

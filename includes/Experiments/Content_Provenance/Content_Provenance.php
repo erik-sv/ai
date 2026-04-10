@@ -16,6 +16,7 @@ use WordPress\AI\Experiments\Content_Provenance\Signing\Connected_Signer;
 use WordPress\AI\Experiments\Content_Provenance\Signing\Local_Signer;
 use WordPress\AI\Experiments\Content_Provenance\Signing\Signing_Interface;
 use WordPress\AI\Experiments\Experiment_Category;
+use WordPress\AI\Settings\Settings_Registration;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -94,337 +95,280 @@ class Content_Provenance extends Abstract_Feature {
 			10,
 			2
 		);
+
+		// Frontend provenance badge on published content.
+		Verification_Badge::configure(
+			(bool) $this->get_signing_option( 'show_badge', true ),
+			(string) ( $this->get_signing_option( 'badge_position', 'below' ) )
+		);
+		Verification_Badge::register_hooks();
+		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
 	}
 
 	/**
 	 * Registers experiment-specific settings with the WordPress Settings API.
 	 *
-	 * All options are namespaced via get_field_option_name() and grouped under
-	 * the 'ai_experiments' settings group used by the experiments settings page.
+	 * All options are namespaced via get_field_option_name() and exposed to
+	 * the REST API so the React-based settings page can read and write them.
 	 *
 	 * @since x.x.x
 	 */
 	public function register_settings(): void {
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'signing_tier' ),
 			array(
-				'sanitize_callback' => 'sanitize_text_field',
+				'type'              => 'string',
 				'default'           => 'local',
+				'sanitize_callback' => 'sanitize_text_field',
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+						'enum' => array( 'local', 'connected', 'byok' ),
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'connected_service_url' ),
 			array(
-				'sanitize_callback' => 'esc_url_raw',
+				'type'              => 'string',
+				'description'       => __( 'Signing endpoint for your CA-verified provider.', 'ai' ),
 				'default'           => Connected_Signer::DEFAULT_SERVICE_URL,
+				'sanitize_callback' => 'esc_url_raw',
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'connected_service_api_key' ),
 			array(
-				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
+				'type'              => 'string',
+				'description'       => __( 'API key from your CA-verified signing provider.', 'ai' ),
 				'default'           => '',
+				'sanitize_callback' => array( $this, 'sanitize_api_key' ),
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'byok_key_path' ),
 			array(
-				'sanitize_callback' => array( $this, 'sanitize_file_path' ),
+				'type'              => 'string',
 				'default'           => '',
+				'sanitize_callback' => array( $this, 'sanitize_file_path' ),
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'byok_certificate' ),
 			array(
-				'sanitize_callback' => array( $this, 'sanitize_file_path' ),
+				'type'              => 'string',
 				'default'           => '',
+				'sanitize_callback' => array( $this, 'sanitize_file_path' ),
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'auto_sign' ),
 			array(
-				'sanitize_callback' => 'rest_sanitize_boolean',
-				'default'           => true,
+				'type'              => 'string',
+				'default'           => '1',
+				'sanitize_callback' => 'sanitize_text_field',
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+						'enum' => array( '1', '' ),
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'show_badge' ),
 			array(
-				'sanitize_callback' => 'rest_sanitize_boolean',
-				'default'           => true,
+				'type'              => 'string',
+				'default'           => '1',
+				'sanitize_callback' => 'sanitize_text_field',
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+						'enum' => array( '1', '' ),
+					),
+				),
 			)
 		);
 
 		register_setting(
-			'ai_experiments',
+			Settings_Registration::OPTION_GROUP,
 			$this->get_field_option_name( 'badge_position' ),
 			array(
-				'sanitize_callback' => 'sanitize_text_field',
+				'type'              => 'string',
 				'default'           => 'below',
+				'sanitize_callback' => 'sanitize_text_field',
+				'show_in_rest'      => array(
+					'schema' => array(
+						'type' => 'string',
+						'enum' => array( 'below', 'above' ),
+					),
+				),
 			)
+		);
+
+		// Mask the API key when read via get_option() so the REST API
+		// returns the masked value instead of the encrypted ciphertext.
+		add_filter(
+			'option_' . $this->get_field_option_name( 'connected_service_api_key' ),
+			array( self::class, 'mask_api_key_option' )
 		);
 	}
 
 	/**
-	 * Renders the experiment settings fields inside the experiment card.
-	 *
-	 * Outputs signing-tier selection, conditional service configuration inputs,
-	 * badge display controls, and a short explanation of trust tiers per PRD §4.1.
+	 * {@inheritDoc}
+	 */
+	public function get_settings_fields(): array {
+		return array(
+			array(
+				'id'       => 'signing_tier',
+				'label'    => __( 'Signing tier', 'ai' ),
+				'type'     => 'text',
+				'default'  => 'local',
+				'elements' => array(
+					array(
+						'value' => 'local',
+						'label' => __( 'Local (self-signed)', 'ai' ),
+					),
+					array(
+						'value' => 'connected',
+						'label' => __( 'Connected - CA-verified provider', 'ai' ),
+					),
+					array(
+						'value' => 'byok',
+						'label' => __( 'BYOK (your own certificate)', 'ai' ),
+					),
+				),
+			),
+			array(
+				'id'          => 'connected_service_url',
+				'label'       => __( 'Service URL', 'ai' ),
+				'description' => __( 'Signing endpoint for your CA-verified provider. Pre-configured with a default; update to match your provider.', 'ai' ),
+				'type'        => 'text',
+				'default'     => Connected_Signer::DEFAULT_SERVICE_URL,
+			),
+			array(
+				'id'          => 'connected_service_api_key',
+				'label'       => __( 'API key', 'ai' ),
+				'description' => $this->get_known_providers_description(),
+				'type'        => 'text',
+				'default'     => '',
+			),
+			array(
+				'id'      => 'byok_key_path',
+				'label'   => __( 'Private key path', 'ai' ),
+				'type'    => 'text',
+				'default' => '',
+			),
+			array(
+				'id'      => 'byok_certificate',
+				'label'   => __( 'Certificate path', 'ai' ),
+				'type'    => 'text',
+				'default' => '',
+			),
+			array(
+				'id'       => 'auto_sign',
+				'label'    => __( 'Auto-sign on publish', 'ai' ),
+				'type'     => 'text',
+				'default'  => '1',
+				'elements' => array(
+					array(
+						'value' => '1',
+						'label' => __( 'Enabled', 'ai' ),
+					),
+					array(
+						'value' => '',
+						'label' => __( 'Disabled', 'ai' ),
+					),
+				),
+			),
+			array(
+				'id'       => 'show_badge',
+				'label'    => __( 'Show provenance badge', 'ai' ),
+				'type'     => 'text',
+				'default'  => '1',
+				'elements' => array(
+					array(
+						'value' => '1',
+						'label' => __( 'Enabled', 'ai' ),
+					),
+					array(
+						'value' => '',
+						'label' => __( 'Disabled', 'ai' ),
+					),
+				),
+			),
+			array(
+				'id'       => 'badge_position',
+				'label'    => __( 'Badge position', 'ai' ),
+				'type'     => 'text',
+				'default'  => 'below',
+				'elements' => array(
+					array(
+						'value' => 'below',
+						'label' => __( 'Below content', 'ai' ),
+					),
+					array(
+						'value' => 'above',
+						'label' => __( 'Above content', 'ai' ),
+					),
+				),
+			),
+		);
+	}
+
+
+	/**
+	 * Builds the API key description with a list of known compatible providers.
 	 *
 	 * @since x.x.x
+	 *
+	 * @return string Translated description string.
 	 */
-	public function render_settings_fields(): void {
-		$signing_tier_raw          = $this->get_signing_option( 'signing_tier' );
-		$signing_tier              = $signing_tier_raw ? (string) $signing_tier_raw : 'local';
-		$connected_service_url_raw = $this->get_signing_option( 'connected_service_url' );
-		$connected_service_url     = $connected_service_url_raw ? (string) $connected_service_url_raw : Connected_Signer::DEFAULT_SERVICE_URL;
-		$connected_service_api_key = self::decrypt_value( (string) $this->get_signing_option( 'connected_service_api_key' ) );
-		$byok_key_path             = (string) $this->get_signing_option( 'byok_key_path' );
-		$byok_certificate          = (string) $this->get_signing_option( 'byok_certificate' );
-		$auto_sign                 = (bool) $this->get_signing_option( 'auto_sign' );
-		$show_badge                = (bool) $this->get_signing_option( 'show_badge' );
-		$badge_position_raw        = (string) $this->get_signing_option( 'badge_position' );
-		$badge_position            = $badge_position_raw ? $badge_position_raw : 'below';
+	private function get_known_providers_description(): string {
+		$names = array_map(
+			fn( array $provider ): string => $provider['name'],
+			Connected_Signer::KNOWN_PROVIDERS
+		);
 
-		$tier_name_signing       = $this->get_field_option_name( 'signing_tier' );
-		$tier_name_service_url   = $this->get_field_option_name( 'connected_service_url' );
-		$tier_name_api_key       = $this->get_field_option_name( 'connected_service_api_key' );
-		$tier_name_byok_key_path = $this->get_field_option_name( 'byok_key_path' );
-		$tier_name_byok_cert     = $this->get_field_option_name( 'byok_certificate' );
-		$tier_name_auto_sign     = $this->get_field_option_name( 'auto_sign' );
-		$tier_name_show_badge    = $this->get_field_option_name( 'show_badge' );
-		$tier_name_badge_pos     = $this->get_field_option_name( 'badge_position' );
-		?>
-		<fieldset class="ai-experiment-content-provenance-settings">
-			<legend class="screen-reader-text">
-				<?php esc_html_e( 'Content Provenance Settings', 'ai' ); ?>
-			</legend>
-
-			<details>
-				<summary><?php esc_html_e( 'Signing Tier', 'ai' ); ?></summary>
-				<p class="description">
-					<?php
-					esc_html_e(
-						'Choose how content is signed. Local signing requires no external services and uses a key stored in the database. Connected signing delegates to an external key-management service for a fuller trust chain. Bring-Your-Own-Key (BYOK) lets you supply your own CA-backed private key.',
-						'ai'
-					);
-					?>
-				</p>
-
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_signing ); ?>">
-								<?php esc_html_e( 'Signing Tier', 'ai' ); ?>
-							</label>
-						</th>
-						<td>
-							<select
-								id="<?php echo esc_attr( $tier_name_signing ); ?>"
-								name="<?php echo esc_attr( $tier_name_signing ); ?>"
-							>
-								<option value="local" <?php selected( $signing_tier, 'local' ); ?>>
-									<?php esc_html_e( 'Local — self-signed, zero config', 'ai' ); ?>
-								</option>
-								<option value="connected" <?php selected( $signing_tier, 'connected' ); ?>>
-									<?php esc_html_e( 'Connected — CA-verified via Encypher', 'ai' ); ?>
-								</option>
-								<option value="byok" <?php selected( $signing_tier, 'byok' ); ?>>
-									<?php esc_html_e( 'BYOK — your own CA-issued certificate', 'ai' ); ?>
-								</option>
-							</select>
-						</td>
-					</tr>
-				</table>
-			</details>
-
-			<details <?php echo 'connected' === $signing_tier ? 'open' : ''; ?>>
-				<summary><?php esc_html_e( 'Connected Service Configuration', 'ai' ); ?></summary>
-				<p class="description">
-					<?php esc_html_e( 'Connected signing uses a CA-verified certificate from the Encypher signing service. Manifests are trusted by standard C2PA verifiers like Content Credentials.', 'ai' ); ?>
-				</p>
-
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_service_url ); ?>">
-								<?php esc_html_e( 'Service URL', 'ai' ); ?>
-							</label>
-						</th>
-						<td>
-							<input
-								type="url"
-								id="<?php echo esc_attr( $tier_name_service_url ); ?>"
-								name="<?php echo esc_attr( $tier_name_service_url ); ?>"
-								value="<?php echo esc_attr( $connected_service_url ); ?>"
-								class="regular-text"
-							/>
-							<p class="description">
-								<?php esc_html_e( 'Pre-configured for Encypher. Change only if using a custom signing service.', 'ai' ); ?>
-							</p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_api_key ); ?>">
-								<?php esc_html_e( 'API Key', 'ai' ); ?>
-							</label>
-						</th>
-						<td>
-							<?php
-							$masked_key = '';
-							if ( '' !== $connected_service_api_key ) {
-								$masked_key = str_repeat( '*', max( 0, strlen( $connected_service_api_key ) - 4 ) ) . substr( $connected_service_api_key, -4 );
-							}
-							?>
-							<input
-								type="password"
-								id="<?php echo esc_attr( $tier_name_api_key ); ?>"
-								name="<?php echo esc_attr( $tier_name_api_key ); ?>"
-								value="<?php echo esc_attr( $masked_key ); ?>"
-								class="regular-text"
-								autocomplete="new-password"
-								placeholder="<?php esc_attr_e( 'Enter API key', 'ai' ); ?>"
-							/>
-							<p class="description">
-								<?php
-								printf(
-									/* translators: %s: URL to the Encypher signup page. */
-									esc_html__( 'Get your free API key at %s', 'ai' ),
-									'<a href="https://encypher.com/signup" target="_blank" rel="noopener noreferrer">encypher.com/signup</a>'
-								);
-								?>
-							</p>
-						</td>
-					</tr>
-				</table>
-			</details>
-
-			<details <?php echo 'byok' === $signing_tier ? 'open' : ''; ?>>
-				<summary><?php esc_html_e( 'BYOK Certificate Configuration', 'ai' ); ?></summary>
-				<p class="description">
-					<?php esc_html_e( 'Supply your own CA-issued EC P-256 private key and X.509 certificate for the highest trust level. The certificate should be issued by a C2PA trust list CA (SSL.com, DigiCert, etc.).', 'ai' ); ?>
-				</p>
-
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_byok_key_path ); ?>">
-								<?php esc_html_e( 'Private Key Path', 'ai' ); ?>
-							</label>
-						</th>
-						<td>
-							<input
-								type="text"
-								id="<?php echo esc_attr( $tier_name_byok_key_path ); ?>"
-								name="<?php echo esc_attr( $tier_name_byok_key_path ); ?>"
-								value="<?php echo esc_attr( $byok_key_path ); ?>"
-								class="large-text"
-								placeholder="/etc/ssl/private/c2pa-signing-key.pem"
-							/>
-							<p class="description">
-								<?php esc_html_e( 'Filesystem path to PEM-encoded EC P-256 private key. Must be readable by the web server.', 'ai' ); ?>
-							</p>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_byok_cert ); ?>">
-								<?php esc_html_e( 'Certificate Path', 'ai' ); ?>
-							</label>
-						</th>
-						<td>
-							<input
-								type="text"
-								id="<?php echo esc_attr( $tier_name_byok_cert ); ?>"
-								name="<?php echo esc_attr( $tier_name_byok_cert ); ?>"
-								value="<?php echo esc_attr( $byok_certificate ); ?>"
-								class="large-text"
-								placeholder="/etc/ssl/certs/c2pa-signing-cert.pem"
-							/>
-							<p class="description">
-								<?php esc_html_e( 'Filesystem path to PEM-encoded X.509 certificate (or chain).', 'ai' ); ?>
-							</p>
-						</td>
-					</tr>
-				</table>
-			</details>
-
-			<details>
-				<summary><?php esc_html_e( 'Publishing Options', 'ai' ); ?></summary>
-				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<?php esc_html_e( 'Auto-sign', 'ai' ); ?>
-						</th>
-						<td>
-							<label>
-								<input
-									type="checkbox"
-									name="<?php echo esc_attr( $tier_name_auto_sign ); ?>"
-									value="1"
-									<?php checked( $auto_sign ); ?>
-								/>
-								<?php esc_html_e( 'Automatically sign content on publish and update', 'ai' ); ?>
-							</label>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row">
-							<?php esc_html_e( 'Provenance Badge', 'ai' ); ?>
-						</th>
-						<td>
-							<label>
-								<input
-									type="checkbox"
-									name="<?php echo esc_attr( $tier_name_show_badge ); ?>"
-									value="1"
-									<?php checked( $show_badge ); ?>
-								/>
-								<?php esc_html_e( 'Show provenance badge on signed content', 'ai' ); ?>
-							</label>
-						</td>
-					</tr>
-					<tr>
-						<th scope="row">
-							<label for="<?php echo esc_attr( $tier_name_badge_pos ); ?>">
-								<?php esc_html_e( 'Badge Position', 'ai' ); ?>
-							</label>
-						</th>
-						<td>
-							<select
-								id="<?php echo esc_attr( $tier_name_badge_pos ); ?>"
-								name="<?php echo esc_attr( $tier_name_badge_pos ); ?>"
-							>
-								<option value="below" <?php selected( $badge_position, 'below' ); ?>>
-									<?php esc_html_e( 'Below content', 'ai' ); ?>
-								</option>
-								<option value="above" <?php selected( $badge_position, 'above' ); ?>>
-									<?php esc_html_e( 'Above content', 'ai' ); ?>
-								</option>
-								<option value="inline" <?php selected( $badge_position, 'inline' ); ?>>
-									<?php esc_html_e( 'Inline (end of content)', 'ai' ); ?>
-								</option>
-							</select>
-						</td>
-					</tr>
-				</table>
-			</details>
-		</fieldset>
-		<?php
+		return sprintf(
+			/* translators: %s: comma-separated list of known signing providers. */
+			__( 'API key from your CA-verified signing provider. Known compatible providers: %s.', 'ai' ),
+			implode( ', ', $names )
+		);
 	}
 
 	/**
@@ -449,6 +393,17 @@ class Content_Provenance extends Abstract_Feature {
 
 		if ( 'auto-draft' === $post->post_status ) {
 			return;
+		}
+
+		// Skip if already signed and content unchanged since last signature.
+		// Prevents phantom re-signing when the block editor autosaves or
+		// the REST API re-saves an already-published post.
+		if ( 'signed' === get_post_meta( $post_id, '_c2pa_status', true ) ) {
+			$stored_hash  = get_post_meta( $post_id, '_c2pa_content_hash', true );
+			$current_hash = md5( wp_strip_all_tags( $post->post_content ) );
+			if ( $stored_hash === $current_hash ) {
+				return;
+			}
 		}
 
 		$this->sign_post( $post_id, $post, 'c2pa.created' );
@@ -562,6 +517,7 @@ class Content_Provenance extends Abstract_Feature {
 		update_post_meta( $post_id, '_c2pa_status', 'signed' );
 		update_post_meta( $post_id, '_c2pa_signed_at', gmdate( 'c' ) );
 		update_post_meta( $post_id, '_c2pa_signer_tier', $signer->get_tier() );
+		update_post_meta( $post_id, '_c2pa_content_hash', md5( $plain_text ) );
 
 		return true;
 	}
@@ -754,6 +710,23 @@ class Content_Provenance extends Abstract_Feature {
 	}
 
 	/**
+	 * Enqueues frontend styles for the provenance badge on singular views.
+	 *
+	 * @since x.x.x
+	 */
+	public function enqueue_frontend_assets(): void {
+		if ( ! is_singular() || is_admin() ) {
+			return;
+		}
+
+		if ( ! $this->get_signing_option( 'show_badge', true ) ) {
+			return;
+		}
+
+		Asset_Loader::enqueue_style( 'content-provenance-frontend', 'experiments/content-provenance-frontend' );
+	}
+
+	/**
 	 * Registers the /.well-known/c2pa rewrite rule.
 	 *
 	 * Delegates to Well_Known_Handler for rewrite registration.
@@ -844,7 +817,7 @@ class Content_Provenance extends Abstract_Feature {
 		$tier     = $raw_tier ? (string) $raw_tier : 'local';
 
 		if ( 'connected' === $tier ) {
-			$encrypted_key = (string) $this->get_signing_option( 'connected_service_api_key' );
+			$encrypted_key = $this->get_raw_api_key();
 			return new Connected_Signer(
 				(string) $this->get_signing_option( 'connected_service_url' ),
 				self::decrypt_value( $encrypted_key )
@@ -874,9 +847,15 @@ class Content_Provenance extends Abstract_Feature {
 		$value = sanitize_text_field( $value );
 
 		// If the submitted value is all asterisks followed by up to 4 chars,
-		// the user did not change the key — keep the stored value.
+		// the user did not change the key — keep the stored encrypted value.
 		if ( preg_match( '/^\*+.{0,4}$/', $value ) ) {
-			$stored = get_option( $this->get_field_option_name( 'connected_service_api_key' ), '' );
+			$option_name = $this->get_field_option_name( 'connected_service_api_key' );
+
+			// Temporarily remove the masking filter to read raw ciphertext.
+			remove_filter( 'option_' . $option_name, array( self::class, 'mask_api_key_option' ) );
+			$stored = get_option( $option_name, '' );
+			add_filter( 'option_' . $option_name, array( self::class, 'mask_api_key_option' ) );
+
 			return is_string( $stored ) ? $stored : '';
 		}
 
@@ -885,6 +864,31 @@ class Content_Provenance extends Abstract_Feature {
 		}
 
 		return self::encrypt_value( $value );
+	}
+
+	/**
+	 * Masks the encrypted API key for display via get_option().
+	 *
+	 * Hooked to `option_{name}` so the REST API returns a masked value
+	 * instead of the raw encrypted ciphertext.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param mixed $value The raw option value (encrypted ciphertext).
+	 * @return string Masked API key showing only the last 4 characters.
+	 */
+	public static function mask_api_key_option( $value ): string {
+		if ( ! is_string( $value ) || '' === $value ) {
+			return '';
+		}
+
+		$decrypted = self::decrypt_value( $value );
+		if ( '' === $decrypted ) {
+			return '';
+		}
+
+		$visible = min( 4, strlen( $decrypted ) );
+		return str_repeat( '*', max( 0, strlen( $decrypted ) - $visible ) ) . substr( $decrypted, -$visible );
 	}
 
 	/**
@@ -915,17 +919,6 @@ class Content_Provenance extends Abstract_Feature {
 		return $value;
 	}
 
-	/**
-	 * Returns the value of an experiment setting option.
-	 *
-	 * Wraps get_option() with the namespaced option name produced by
-	 * get_field_option_name() to reduce boilerplate at call sites.
-	 *
-	 * @since x.x.x
-	 *
-	 * @param string $name Base option name (e.g. 'signing_tier').
-	 * @return mixed Option value, or false if not set.
-	 */
 	/**
 	 * Encrypts a value for at-rest storage using AES-256-CBC with the site auth key.
 	 *
@@ -1002,8 +995,23 @@ class Content_Provenance extends Abstract_Feature {
 	 * @param string $name Base option name (e.g. 'signing_tier').
 	 * @return mixed Option value, or false if not set.
 	 */
-	private function get_signing_option( string $name ) {
-		return get_option( $this->get_field_option_name( $name ) );
+	private function get_signing_option( string $name, mixed $default = false ) {
+		return get_option( $this->get_field_option_name( $name ), $default );
+	}
+
+	/**
+	 * Reads the raw encrypted API key, bypassing the masking filter.
+	 *
+	 * @since x.x.x
+	 *
+	 * @return string Encrypted API key ciphertext, or empty string.
+	 */
+	private function get_raw_api_key(): string {
+		$option_name = $this->get_field_option_name( 'connected_service_api_key' );
+		remove_filter( 'option_' . $option_name, array( self::class, 'mask_api_key_option' ) );
+		$value = (string) get_option( $option_name, '' );
+		add_filter( 'option_' . $option_name, array( self::class, 'mask_api_key_option' ) );
+		return $value;
 	}
 
 	/**

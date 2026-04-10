@@ -78,6 +78,11 @@ module.exports = {
 			'src/experiments/content-provenance',
 			'index.js'
 		),
+		'experiments/content-provenance-frontend': path.resolve(
+			process.cwd(),
+			'src/experiments/content-provenance',
+			'frontend.scss'
+		),
 		'experiments/alt-text-generation-media': path.resolve(
 			process.cwd(),
 			'src/experiments/alt-text-generation',

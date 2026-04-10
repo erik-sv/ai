@@ -20,6 +20,17 @@ use WordPress\AI\Experiments\Content_Provenance\Verification_Badge;
 class Verification_BadgeTest extends WP_UnitTestCase {
 
 	/**
+	 * Reset badge configuration before each test.
+	 *
+	 * Other tests may call Verification_Badge::configure() with different
+	 * values, so each badge test starts from a known enabled state.
+	 */
+	public function setUp(): void {
+		parent::setUp();
+		Verification_Badge::configure( true, 'below' );
+	}
+
+	/**
 	 * Test that register_hooks adds the content filter.
 	 *
 	 * @since 0.5.0
