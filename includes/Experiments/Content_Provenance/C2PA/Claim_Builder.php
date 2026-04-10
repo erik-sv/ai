@@ -2,7 +2,7 @@
 /**
  * C2PA claim and assertion builder.
  *
- * Translates WordPress content metadata into C2PA 2.3 claim and assertion
+ * Translates WordPress content metadata into C2PA 2.4 claim and assertion
  * structures, serialized as CBOR. Produces the semantic data layer that
  * gets wrapped in COSE_Sign1 and JUMBF containers.
  *
@@ -17,7 +17,7 @@ namespace WordPress\AI\Experiments\Content_Provenance\C2PA;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * C2PA 2.3 claim and assertion builder.
+ * C2PA 2.4 claim and assertion builder.
  *
  * @since x.x.x
  */
@@ -45,11 +45,11 @@ final class Claim_Builder {
 	public const ASSERTION_SOFT_BINDING = 'c2pa.soft_binding';
 
 	/**
-	 * C2PA assertion label for ingredient reference.
+	 * C2PA assertion label for ingredient reference (v3 per C2PA 2.4).
 	 *
 	 * @var string
 	 */
-	public const ASSERTION_INGREDIENT = 'c2pa.ingredient.v2';
+	public const ASSERTION_INGREDIENT = 'c2pa.ingredient.v3';
 
 	/**
 	 * Content text to sign.
@@ -219,7 +219,7 @@ final class Claim_Builder {
 	/**
 	 * Builds the c2pa.hash.data assertion with SHA-256 content hash.
 	 *
-	 * Per C2PA 2.3 data-hash-map CDDL, required fields are `hash` (bstr)
+	 * Per C2PA 2.4 data-hash-map CDDL, required fields are `hash` (bstr)
 	 * and `pad` (zero-filled bstr). The hash covers NFC-normalized UTF-8
 	 * text with the manifest wrapper excluded.
 	 *
@@ -251,6 +251,15 @@ final class Claim_Builder {
 	/**
 	 * Builds the c2pa.soft_binding assertion for text embedding (Section A.7).
 	 *
+	 * Per the C2PA 2.4 soft-binding-map CDDL, required fields are `alg`
+	 * (binding algorithm) and `blocks` (array of soft-binding-block-map).
+	 * Each block contains a `scope` (soft-binding-scope-map, all fields
+	 * optional) and a `value` (bstr, algorithm-specific binding value).
+	 *
+	 * For text using c2pa.text.vs16, the scope covers the full document
+	 * (empty scope map) and the value is the SHA-256 hash of the
+	 * NFC-normalized text.
+	 *
 	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded assertion.
@@ -258,20 +267,29 @@ final class Claim_Builder {
 	private function build_soft_binding_assertion(): string {
 		$normalized = self::nfc_normalize( $this->content );
 
+		$block = array(
+			'scope' => CBOR_Encoder::encode_map( array() ),
+			'value' => CBOR_Encoder::encode_byte_string(
+				hash( 'sha256', $normalized, true )
+			),
+		);
+
 		$assertion = array(
-			'alg'             => 'c2pa.text.vs16',
-			'document_length' => mb_strlen( $normalized, 'UTF-8' ),
+			'alg'    => 'c2pa.text.vs16',
+			'blocks' => array( $block ),
 		);
 
 		return CBOR_Encoder::encode( $assertion );
 	}
 
 	/**
-	 * Builds the c2pa.ingredient.v2 assertion referencing a previous manifest.
+	 * Builds the c2pa.ingredient.v3 assertion referencing a previous manifest.
 	 *
-	 * Per C2PA 2.3 §8.3, the ingredient assertion includes the hash of the
-	 * previous manifest to form a provenance chain. Verifiers can trace edits
-	 * back through the chain by following ingredient references.
+	 * Per C2PA 2.4 ingredient-map-v3 CDDL, `relationship` is the only
+	 * required field. `dc:title` and `dc:format` are optional in v3 but
+	 * included for interoperability. The previous manifest is referenced
+	 * via `activeManifest`, a hashed-uri-map containing a JUMBF URI, hash
+	 * algorithm, and SHA-256 hash of the previous manifest store.
 	 *
 	 * @since x.x.x
 	 *
@@ -282,12 +300,13 @@ final class Claim_Builder {
 		$previous_manifest = (string) $this->previous_manifest;
 
 		$assertion = array(
-			'relationship' => 'parentOf',
-			'title'        => 'Previous version',
-			'format'       => 'application/c2pa',
-			'hash'         => array(
-				'name'  => 'sha256',
-				'value' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $previous_manifest, true ) ),
+			'relationship'   => 'parentOf',
+			'dc:title'       => 'Previous version',
+			'dc:format'      => 'application/c2pa',
+			'activeManifest' => array(
+				'url'  => 'self#jumbf=' . $this->manifest_label . '/c2pa.assertions/' . self::ASSERTION_INGREDIENT,
+				'alg'  => 'sha256',
+				'hash' => CBOR_Encoder::encode_byte_string( hash( 'sha256', $previous_manifest, true ) ),
 			),
 		);
 
@@ -299,7 +318,7 @@ final class Claim_Builder {
 	 *
 	 * Produces a claim map with v2 field names: `created_assertions` (not
 	 * `assertions`), `claim_generator_info` (not `claimGenerator`), and
-	 * no `dc:format`. See C2PA 2.3 Section 10 for the claim structure.
+	 * no `dc:format`. See C2PA 2.4 Section 10 for the claim structure.
 	 *
 	 * Per the spec, hashed URI references hash the JUMBF superbox content
 	 * (description box + content boxes, excluding the superbox header).

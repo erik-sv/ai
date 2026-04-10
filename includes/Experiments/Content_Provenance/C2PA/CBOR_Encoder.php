@@ -110,7 +110,7 @@ final class CBOR_Encoder {
 				? self::encode( $key )
 				: self::encode_text_string( (string) $key );
 
-			$encoded_value = is_string( $value ) && self::is_cbor_bytes( $value )
+			$encoded_value = is_string( $value ) && self::is_preencoded_cbor( $value )
 				? $value
 				: self::encode( $value );
 
@@ -246,25 +246,30 @@ final class CBOR_Encoder {
 	}
 
 	/**
-	 * Heuristic check for pre-encoded CBOR byte strings in map values.
+	 * Heuristic check for pre-encoded CBOR values in map values.
 	 *
 	 * Values passed to encode_map() that are already CBOR-encoded (from
-	 * encode_byte_string, encode_tagged, etc.) should not be double-encoded.
-	 * This checks if the string looks like a CBOR byte string header.
+	 * encode_byte_string, encode_map, encode_array, encode_tagged, etc.)
+	 * should not be double-encoded as text strings.
+	 *
+	 * Detects major types 2 (byte strings), 4 (arrays), 5 (maps), and
+	 * 6 (tags). Does not match major type 3 (text strings), which are
+	 * indistinguishable from plain PHP strings and should always be
+	 * re-encoded.
 	 *
 	 * @since x.x.x
 	 *
 	 * @param string $value The string to check.
 	 * @return bool True if this appears to be pre-encoded CBOR.
 	 */
-	private static function is_cbor_bytes( string $value ): bool {
+	private static function is_preencoded_cbor( string $value ): bool {
 		if ( strlen( $value ) === 0 ) {
 			return false;
 		}
 
-		$first = ord( $value[0] );
+		$major_type = ( ord( $value[0] ) >> 5 ) & 0x07;
 
-		// Check if the first byte indicates a CBOR byte string (major type 2: 0x40-0x5f).
-		return ( $first >= 0x40 && $first <= 0x5b );
+		// Pre-encoded CBOR: byte strings (2), arrays (4), maps (5), tags (6).
+		return 2 === $major_type || 4 === $major_type || 5 === $major_type || 6 === $major_type;
 	}
 }

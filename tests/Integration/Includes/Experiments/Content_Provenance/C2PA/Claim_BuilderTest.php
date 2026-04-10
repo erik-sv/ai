@@ -2,7 +2,7 @@
 /**
  * Tests for the Claim_Builder class.
  *
- * Validates C2PA 2.3 claim and assertion structure generation.
+ * Validates C2PA 2.4 claim and assertion structure generation.
  *
  * @package WordPress\AI\Tests\Integration\Experiments\Content_Provenance\C2PA
  */
@@ -220,16 +220,64 @@ class Claim_BuilderTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that soft_binding assertion references text embedding method.
+	 * Test that soft_binding assertion contains required alg and blocks fields.
 	 */
-	public function test_soft_binding_references_text_embedding(): void {
+	public function test_soft_binding_contains_alg_and_blocks(): void {
 		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
 		$result  = $builder->build();
 
+		$soft_binding = $result['assertion_map'][ Claim_Builder::ASSERTION_SOFT_BINDING ];
+
 		$this->assertStringContainsString(
-			'c2pa.text',
+			'c2pa.text.vs16',
+			$soft_binding,
+			'Soft binding should contain c2pa.text.vs16 algorithm.'
+		);
+		$this->assertStringContainsString(
+			'blocks',
+			$soft_binding,
+			'Soft binding should contain required blocks field per C2PA CDDL.'
+		);
+		$this->assertStringContainsString(
+			'scope',
+			$soft_binding,
+			'Soft binding block should contain scope field.'
+		);
+		$this->assertStringContainsString(
+			'value',
+			$soft_binding,
+			'Soft binding block should contain value field.'
+		);
+	}
+
+	/**
+	 * Test that soft_binding block value contains SHA-256 hash of content.
+	 */
+	public function test_soft_binding_block_value_contains_content_hash(): void {
+		$content = 'Specific content for soft binding hash.';
+		$builder = new Claim_Builder( $content, 'c2pa.created', array(), 'urn:uuid:test' );
+		$result  = $builder->build();
+
+		$expected_hash = hash( 'sha256', $content, true );
+
+		$this->assertStringContainsString(
+			$expected_hash,
 			$result['assertion_map'][ Claim_Builder::ASSERTION_SOFT_BINDING ],
-			'Soft binding should reference text embedding algorithm.'
+			'Soft binding block value should contain SHA-256 of content.'
+		);
+	}
+
+	/**
+	 * Test that soft_binding does not contain the non-spec document_length field.
+	 */
+	public function test_soft_binding_has_no_document_length(): void {
+		$builder = new Claim_Builder( 'Test.', 'c2pa.created', array(), 'urn:uuid:test' );
+		$result  = $builder->build();
+
+		$this->assertStringNotContainsString(
+			'document_length',
+			$result['assertion_map'][ Claim_Builder::ASSERTION_SOFT_BINDING ],
+			'Soft binding must not contain non-spec document_length field.'
 		);
 	}
 
@@ -293,6 +341,72 @@ class Claim_BuilderTest extends WP_UnitTestCase {
 			$expected_hash,
 			$ingredient_cbor,
 			'Ingredient assertion should contain SHA-256 hash of previous manifest.'
+		);
+	}
+
+	/**
+	 * Test that ingredient v3 assertion uses Dublin Core field names.
+	 */
+	public function test_ingredient_v3_uses_dublin_core_field_names(): void {
+		$previous = 'fake-previous-manifest';
+		$builder  = new Claim_Builder( 'Test.', 'c2pa.edited', array(), 'urn:uuid:test', $previous );
+		$result   = $builder->build();
+
+		$ingredient_cbor = $result['assertion_map'][ Claim_Builder::ASSERTION_INGREDIENT ];
+
+		$this->assertStringContainsString(
+			'dc:title',
+			$ingredient_cbor,
+			'Ingredient v3 must use dc:title (Dublin Core prefix).'
+		);
+		$this->assertStringContainsString(
+			'dc:format',
+			$ingredient_cbor,
+			'Ingredient v3 must use dc:format (Dublin Core prefix).'
+		);
+		$this->assertStringNotContainsString(
+			"\x05title",
+			$ingredient_cbor,
+			'Ingredient must not use bare title field (non-spec).'
+		);
+	}
+
+	/**
+	 * Test that ingredient v3 assertion uses activeManifest hashedUriMap.
+	 */
+	public function test_ingredient_v3_uses_active_manifest(): void {
+		$previous = 'fake-previous-manifest';
+		$label    = 'urn:uuid:ingredient-test';
+		$builder  = new Claim_Builder( 'Test.', 'c2pa.edited', array(), $label, $previous );
+		$result   = $builder->build();
+
+		$ingredient_cbor = $result['assertion_map'][ Claim_Builder::ASSERTION_INGREDIENT ];
+
+		$this->assertStringContainsString(
+			'activeManifest',
+			$ingredient_cbor,
+			'Ingredient v3 must use activeManifest hashedUriMap.'
+		);
+		$this->assertStringContainsString(
+			'self#jumbf=',
+			$ingredient_cbor,
+			'activeManifest must contain a JUMBF URI.'
+		);
+		$this->assertStringContainsString(
+			'sha256',
+			$ingredient_cbor,
+			'activeManifest must contain hash algorithm.'
+		);
+	}
+
+	/**
+	 * Test that ingredient assertion label is c2pa.ingredient.v3.
+	 */
+	public function test_ingredient_assertion_label_is_v3(): void {
+		$this->assertSame(
+			'c2pa.ingredient.v3',
+			Claim_Builder::ASSERTION_INGREDIENT,
+			'Ingredient assertion label must be c2pa.ingredient.v3 per C2PA 2.4.'
 		);
 	}
 
