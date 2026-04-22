@@ -135,16 +135,13 @@ class COSE_Sign1_BuilderTest extends WP_UnitTestCase {
 		$cert    = openssl_x509_read( 'file://' . $this->write_temp_cert() );
 		$pub_key = openssl_pkey_get_public( $cert );
 
-		// Build the Sig_structure1 that was signed.
+		// Build the Sig_structure1 that was signed (manually, matching the builder).
 		$protected_header = CBOR_Encoder::encode_map( array( 1 => -7 ) );
-		$sig_structure    = CBOR_Encoder::encode(
-			array(
-				'Signature1',
-				CBOR_Encoder::encode_byte_string( $protected_header ),
-				CBOR_Encoder::encode_byte_string( '' ),
-				CBOR_Encoder::encode_byte_string( $payload ),
-			)
-		);
+		$sig_structure    = "\x84"
+			. CBOR_Encoder::encode( 'Signature1' )
+			. CBOR_Encoder::encode_byte_string( $protected_header )
+			. CBOR_Encoder::encode_byte_string( '' )
+			. CBOR_Encoder::encode_byte_string( $payload );
 
 		// Extract the signature from the COSE_Sign1 structure.
 		$signature_raw = $this->extract_signature_from_cose( $result );
@@ -201,6 +198,41 @@ class COSE_Sign1_BuilderTest extends WP_UnitTestCase {
 		$sig2 = $this->extract_signature_from_cose( $builder2->build() );
 
 		$this->assertNotSame( $sig1, $sig2, 'Different payloads should produce different signatures.' );
+	}
+
+	/**
+	 * Test that the Sig_Structure uses CBOR byte strings for cross-verifier compatibility.
+	 *
+	 * The Sig_structure1 must use CBOR major type 2 (byte strings) for
+	 * protected headers, external AAD, and payload, matching RFC 9052.
+	 * Verifiers in other languages (Python cbor2, etc.) reconstruct the
+	 * Sig_Structure with byte strings and will reject signatures over
+	 * text-string-encoded structures.
+	 */
+	public function test_sig_structure_byte_strings_for_cross_verification(): void {
+		$payload = CBOR_Encoder::encode_map( array( 'cross' => 'verify' ) );
+		$builder = new COSE_Sign1_Builder( $this->private_key_pem, $this->certificate_der, $payload );
+		$result  = $builder->build();
+
+		// Extract public key.
+		$cert    = openssl_x509_read( 'file://' . $this->write_temp_cert() );
+		$pub_key = openssl_pkey_get_public( $cert );
+
+		// Build a Sig_Structure manually with explicit byte strings (no encode() dispatch).
+		// This is what a Python/Rust/Go verifier would construct.
+		$protected_header = CBOR_Encoder::encode_map( array( 1 => -7 ) );
+		$sig_structure    = "\x84"                                             // array(4)
+			. CBOR_Encoder::encode( 'Signature1' )                             // tstr "Signature1"
+			. CBOR_Encoder::encode_byte_string( $protected_header )            // bstr(protected)
+			. CBOR_Encoder::encode_byte_string( '' )                           // bstr(external_aad)
+			. CBOR_Encoder::encode_byte_string( $payload );                    // bstr(payload)
+
+		// Extract signature and verify against the manually-built structure.
+		$signature_raw = $this->extract_signature_from_cose( $result );
+		$signature_der = $this->raw_to_der_ecdsa( $signature_raw );
+
+		$verify_result = openssl_verify( $sig_structure, $signature_der, $pub_key, OPENSSL_ALGO_SHA256 );
+		$this->assertSame( 1, $verify_result, 'Signature must verify against RFC 9052 byte-string Sig_Structure.' );
 	}
 
 	/**

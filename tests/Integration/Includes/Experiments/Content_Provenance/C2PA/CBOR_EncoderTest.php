@@ -266,4 +266,5 @@ class CBOR_EncoderTest extends WP_UnitTestCase {
 		$this->assertSame( "\x78\x1e", substr( $result, 0, 2 ) );
 		$this->assertSame( $text, substr( $result, 2 ) );
 	}
+
 }

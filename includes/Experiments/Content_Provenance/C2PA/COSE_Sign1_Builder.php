@@ -126,25 +126,28 @@ final class COSE_Sign1_Builder {
 	 * Builds the Sig_structure1 CBOR structure (to-be-signed bytes).
 	 *
 	 * Sig_structure1 = [
-	 *   "Signature1",
+	 *   "Signature1",       -- context: tstr
 	 *   body_protected: bstr,
 	 *   external_aad: bstr (empty),
 	 *   payload: bstr
 	 * ]
+	 *
+	 * Constructs the array manually rather than passing pre-encoded byte
+	 * strings through encode(), which would re-encode them as CBOR text
+	 * strings (major type 3) instead of preserving byte strings (major
+	 * type 2). This matches RFC 9052 and ensures cross-verifier compat.
 	 *
 	 * @since x.x.x
 	 *
 	 * @return string CBOR-encoded Sig_structure1.
 	 */
 	private function build_sig_structure(): string {
-		return CBOR_Encoder::encode(
-			array(
-				'Signature1',
-				CBOR_Encoder::encode_byte_string( $this->protected_headers ),
-				CBOR_Encoder::encode_byte_string( '' ),
-				CBOR_Encoder::encode_byte_string( $this->payload ),
-			)
-		);
+		$body = CBOR_Encoder::encode( 'Signature1' )
+			. CBOR_Encoder::encode_byte_string( $this->protected_headers )
+			. CBOR_Encoder::encode_byte_string( '' )
+			. CBOR_Encoder::encode_byte_string( $this->payload );
+
+		return "\x84" . $body;
 	}
 
 	/**

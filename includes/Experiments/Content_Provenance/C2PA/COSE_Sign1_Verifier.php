@@ -45,15 +45,14 @@ final class COSE_Sign1_Verifier {
 			);
 		}
 
-		// Reconstruct Sig_structure1 using the same encoding as COSE_Sign1_Builder.
-		$sig_structure = CBOR_Encoder::encode(
-			array(
-				'Signature1',
-				CBOR_Encoder::encode_byte_string( $parsed['protected_raw'] ),
-				CBOR_Encoder::encode_byte_string( '' ),
-				CBOR_Encoder::encode_byte_string( $parsed['payload_raw'] ),
-			)
-		);
+		// Reconstruct Sig_structure1 per RFC 9052: ["Signature1", bstr, bstr, bstr].
+		// Constructed manually to ensure byte strings (major type 2), not text
+		// strings (major type 3), for cross-verifier compatibility.
+		$sig_structure = "\x84"
+			. CBOR_Encoder::encode( 'Signature1' )
+			. CBOR_Encoder::encode_byte_string( $parsed['protected_raw'] )
+			. CBOR_Encoder::encode_byte_string( '' )
+			. CBOR_Encoder::encode_byte_string( $parsed['payload_raw'] );
 
 		// Convert raw R||S to DER format for openssl_verify.
 		$der_signature = self::raw_to_der_ecdsa( $parsed['signature_raw'] );
