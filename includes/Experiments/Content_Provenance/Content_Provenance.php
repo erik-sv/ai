@@ -462,8 +462,11 @@ class Content_Provenance extends Abstract_Feature {
 
 		$previous_manifest = null;
 		if ( 'c2pa.edited' === $action ) {
-			$raw_manifest      = get_post_meta( $post_id, '_c2pa_manifest', true );
-			$previous_manifest = $raw_manifest ? (string) $raw_manifest : null;
+			$raw_manifest = get_post_meta( $post_id, '_c2pa_manifest', true );
+			if ( $raw_manifest ) {
+				// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode -- Manifest is stored base64-encoded in post meta.
+				$previous_manifest = base64_decode( (string) $raw_manifest, true ) ?: null;
+			}
 		}
 
 		$signer = $this->get_signer();
@@ -489,28 +492,12 @@ class Content_Provenance extends Abstract_Feature {
 			return false;
 		}
 
-		$new_content = Unicode_Embedder::embed( $post->post_content, $result['manifest'] );
+		$new_content = Unicode_Embedder::embed( $plain_text, $result['manifest'] );
 
-		// Temporarily remove own hooks to avoid recursive triggering.
-		remove_action( 'publish_post', array( $this, 'sign_on_publish' ), 20 );
-		remove_action( 'post_updated', array( $this, 'sign_on_update' ), 20 );
-
-		$update_result = wp_update_post(
-			array(
-				'ID'           => $post_id,
-				'post_content' => $new_content,
-			),
-			true
-		);
-
-		// Restore hooks.
-		add_action( 'publish_post', array( $this, 'sign_on_publish' ), 20, 2 );
-		add_action( 'post_updated', array( $this, 'sign_on_update' ), 20, 3 );
-
-		if ( is_wp_error( $update_result ) ) {
-			update_post_meta( $post_id, '_c2pa_status', 'error' );
-			return false;
-		}
+		// Store embedded content (with invisible Unicode markers) in post meta
+		// so other plugins reading post_content get clean text without markers.
+		// The frontend the_content filter injects embeddings for published pages.
+		update_post_meta( $post_id, '_c2pa_embedded_content', $new_content );
 
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Binary JUMBF data must be base64-encoded for safe storage in WordPress post meta.
 		update_post_meta( $post_id, '_c2pa_manifest', base64_encode( $result['manifest'] ) );
@@ -990,13 +977,26 @@ class Content_Provenance extends Abstract_Feature {
 	 * Wraps get_option() with the namespaced option name produced by
 	 * get_field_option_name() to reduce boilerplate at call sites.
 	 *
+	 * When no $default is passed, get_option() is called without an explicit
+	 * default so that WordPress applies the registered-setting default
+	 * (set via register_setting()). Passing an explicit default suppresses
+	 * that behaviour, matching WordPress core semantics.
+	 *
 	 * @since x.x.x
 	 *
-	 * @param string $name Base option name (e.g. 'signing_tier').
-	 * @return mixed Option value, or false if not set.
+	 * @param string $name    Base option name (e.g. 'signing_tier').
+	 * @param mixed  $default Optional. Explicit fallback value.
+	 * @return mixed Option value, registered default, or $default.
 	 */
-	private function get_signing_option( string $name, mixed $default = false ) {
-		return get_option( $this->get_field_option_name( $name ), $default );
+	private function get_signing_option( string $name, mixed $default = null ) {
+		$option_name = $this->get_field_option_name( $name );
+
+		// Only forward an explicit default when the caller provided one.
+		// WordPress skips its own registered defaults when a second argument
+		// is passed to get_option() (it checks func_num_args()).
+		return func_num_args() > 1
+			? get_option( $option_name, $default )
+			: get_option( $option_name );
 	}
 
 	/**

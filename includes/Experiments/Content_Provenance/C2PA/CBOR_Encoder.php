@@ -257,19 +257,57 @@ final class CBOR_Encoder {
 	 * indistinguishable from plain PHP strings and should always be
 	 * re-encoded.
 	 *
+	 * To avoid false positives with plain text (e.g. "C2PA..." starts with
+	 * 0x43, which looks like CBOR byte-string-of-length-3), the method
+	 * also validates that the CBOR head's declared payload length, plus
+	 * the head size, equals the actual string length.
+	 *
 	 * @since x.x.x
 	 *
 	 * @param string $value The string to check.
 	 * @return bool True if this appears to be pre-encoded CBOR.
 	 */
 	private static function is_preencoded_cbor( string $value ): bool {
-		if ( strlen( $value ) === 0 ) {
+		$len = strlen( $value );
+		if ( 0 === $len ) {
 			return false;
 		}
 
-		$major_type = ( ord( $value[0] ) >> 5 ) & 0x07;
+		$first       = ord( $value[0] );
+		$major_type  = ( $first >> 5 ) & 0x07;
 
-		// Pre-encoded CBOR: byte strings (2), arrays (4), maps (5), tags (6).
-		return 2 === $major_type || 4 === $major_type || 5 === $major_type || 6 === $major_type;
+		// Only consider byte strings (2), arrays (4), maps (5), tags (6).
+		if ( 2 !== $major_type && 4 !== $major_type && 5 !== $major_type && 6 !== $major_type ) {
+			return false;
+		}
+
+		// Decode the argument (item count or byte length) from the CBOR head
+		// and verify the total encoded size matches the PHP string length.
+		// For major type 2 (byte string) the argument is the payload length,
+		// so head_size + argument must equal the string length exactly.
+		// For types 4/5/6 we cannot cheaply compute the total size, so we
+		// accept the major-type match alone for those.
+		if ( 2 !== $major_type ) {
+			return true;
+		}
+
+		$additional = $first & 0x1F;
+
+		if ( $additional <= 23 ) {
+			return $len === 1 + $additional;
+		}
+		if ( 24 === $additional && $len >= 2 ) {
+			return $len === 2 + ord( $value[1] );
+		}
+		if ( 25 === $additional && $len >= 3 ) {
+			$payload_len = unpack( 'n', substr( $value, 1, 2 ) )[1];
+			return $len === 3 + $payload_len;
+		}
+		if ( 26 === $additional && $len >= 5 ) {
+			$payload_len = unpack( 'N', substr( $value, 1, 4 ) )[1];
+			return $len === 5 + $payload_len;
+		}
+
+		return false;
 	}
 }

@@ -51,12 +51,52 @@ class Verification_Badge {
 	}
 
 	/**
-	 * Register the frontend badge filter.
+	 * Register the frontend badge and embedding injection filters.
 	 *
 	 * @since x.x.x
 	 */
 	public static function register_hooks(): void {
+		// Inject invisible Unicode embeddings at priority 1 so the final HTML
+		// served to browsers carries C2PA provenance markers (surviving
+		// copy-paste). post_content in the DB stays clean so other plugins
+		// reading it directly (e.g., AI features) don't ingest invisible chars.
+		add_filter( 'the_content', array( self::class, 'inject_c2pa_embeddings' ), 1 );
 		add_filter( 'the_content', array( self::class, 'maybe_append_badge' ), 99 );
+	}
+
+	/**
+	 * Inject invisible Unicode C2PA embeddings into published content.
+	 *
+	 * Reads the embedded content (with provenance markers) from post meta
+	 * and replaces the clean post_content so the final HTML served to
+	 * browsers carries the markers.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param string $content Clean post content.
+	 * @return string Content with invisible Unicode markers injected.
+	 */
+	public static function inject_c2pa_embeddings( string $content ): string {
+		if ( ! is_singular() || is_admin() ) {
+			return $content;
+		}
+
+		$post_id = get_the_ID();
+		if ( ! $post_id ) {
+			return $content;
+		}
+
+		$status = get_post_meta( $post_id, '_c2pa_status', true );
+		if ( 'signed' !== $status ) {
+			return $content;
+		}
+
+		$embedded_content = get_post_meta( $post_id, '_c2pa_embedded_content', true );
+		if ( empty( $embedded_content ) ) {
+			return $content;
+		}
+
+		return $embedded_content;
 	}
 
 	/**
