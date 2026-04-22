@@ -41,13 +41,15 @@ class C2PA_Verify extends Abstract_Ability {
 		return array(
 			'type'       => 'object',
 			'properties' => array(
-				'text' => array(
-					'type'              => 'string',
-					'sanitize_callback' => 'sanitize_text_field',
-					'description'       => esc_html__( 'Signed text content to verify.', 'ai' ),
+				'post_id' => array(
+					'type'        => 'integer',
+					'description' => esc_html__( 'Post ID to verify. Reads the canonical signed bytes from meta.', 'ai' ),
+				),
+				'text'    => array(
+					'type'        => 'string',
+					'description' => esc_html__( 'Signed text content to verify. Prefer post_id when available.', 'ai' ),
 				),
 			),
-			'required'   => array( 'text' ),
 		);
 	}
 
@@ -95,15 +97,28 @@ class C2PA_Verify extends Abstract_Ability {
 		$args = wp_parse_args(
 			is_array( $input ) ? $input : array(),
 			array(
-				'text' => '',
+				'post_id' => 0,
+				'text'    => '',
 			)
 		);
 
-		if ( empty( trim( $args['text'] ) ) ) {
-			return new WP_Error( 'c2pa_empty_text', esc_html__( 'Text is required to verify.', 'ai' ) );
+		$text = $args['text'];
+
+		// Prefer post_id: read the canonical signed bytes from meta.
+		// This avoids sanitize_text_field stripping the invisible
+		// variation selectors that carry the C2PA wrapper.
+		if ( $args['post_id'] ) {
+			$embedded = get_post_meta( (int) $args['post_id'], '_c2pa_embedded_content', true );
+			if ( $embedded ) {
+				$text = (string) $embedded;
+			}
 		}
 
-		return C2PA_Manifest_Builder::extract_and_verify( $args['text'] );
+		if ( empty( trim( $text ) ) ) {
+			return new WP_Error( 'c2pa_empty_text', esc_html__( 'Text or post_id is required to verify.', 'ai' ) );
+		}
+
+		return C2PA_Manifest_Builder::extract_and_verify( $text );
 	}
 
 	/**

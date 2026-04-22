@@ -31,22 +31,70 @@ class Verification_BadgeTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that register_hooks adds the content filter.
+	 * Test that register_hooks adds the content filters.
 	 *
 	 * @since 0.5.0
 	 */
 	public function test_register_hooks_adds_filter(): void {
 		Verification_Badge::register_hooks();
+		$this->assertGreaterThan( 0, has_filter( 'the_content', array( Verification_Badge::class, 'inject_c2pa_embeddings' ) ) );
 		$this->assertGreaterThan( 0, has_filter( 'the_content', array( Verification_Badge::class, 'maybe_append_badge' ) ) );
+		$this->assertGreaterThan( 0, has_action( 'wp_footer', array( Verification_Badge::class, 'render_provenance_data' ) ) );
 	}
 
 	/**
-	 * Test that maybe_append_badge returns content unchanged when is_singular() is false.
+	 * Test that inject_c2pa_embeddings returns content unchanged when not singular.
+	 *
+	 * @since 0.5.0
+	 */
+	public function test_inject_embeddings_returns_unchanged_on_archive(): void {
+		$content = '<p>Hello World</p>';
+		$result  = Verification_Badge::inject_c2pa_embeddings( $content );
+		$this->assertSame( $content, $result );
+	}
+
+	/**
+	 * Test that inject_c2pa_embeddings returns content unchanged when post is not signed.
+	 *
+	 * @since 0.5.0
+	 */
+	public function test_inject_embeddings_returns_unchanged_for_unsigned_post(): void {
+		$post_id = $this->factory->post->create( array( 'post_status' => 'publish' ) );
+		$this->go_to( get_permalink( $post_id ) );
+
+		$content = '<p>Post content.</p>';
+		$result  = Verification_Badge::inject_c2pa_embeddings( $content );
+
+		$this->assertSame( $content, $result );
+	}
+
+	/**
+	 * Test that inject_c2pa_embeddings replaces content with embedded bytes.
+	 *
+	 * @since 0.5.0
+	 */
+	public function test_inject_embeddings_replaces_content_for_signed_post(): void {
+		$post_id  = $this->factory->post->create( array( 'post_status' => 'publish' ) );
+		$embedded = "Signed content.\xEF\xBB\xBF\xEF\xB8\x80";
+		update_post_meta( $post_id, '_c2pa_status', 'signed' );
+		update_post_meta( $post_id, '_c2pa_embedded_content', $embedded );
+
+		$this->go_to( get_permalink( $post_id ) );
+
+		$result = Verification_Badge::inject_c2pa_embeddings( '<p>Original HTML</p>' );
+
+		$this->assertStringContainsString( $embedded, $result );
+		$this->assertStringContainsString( 'c2pa-signed-content', $result );
+		$this->assertStringContainsString( 'white-space', $result );
+		$this->assertStringNotContainsString( 'Original HTML', $result );
+	}
+
+	/**
+	 * Test that maybe_append_badge returns content unchanged when not singular.
 	 *
 	 * @since 0.5.0
 	 */
 	public function test_maybe_append_badge_returns_unchanged_on_archive(): void {
-		// Not in a singular context by default in tests.
 		$content = '<p>Hello World</p>';
 		$result  = Verification_Badge::maybe_append_badge( $content );
 		$this->assertSame( $content, $result );
@@ -64,7 +112,6 @@ class Verification_BadgeTest extends WP_UnitTestCase {
 		$content = '<p>Post content.</p>';
 		$result  = Verification_Badge::maybe_append_badge( $content );
 
-		// No '_c2pa_status' = 'signed' meta → unchanged.
 		$this->assertSame( $content, $result );
 	}
 
@@ -150,5 +197,26 @@ class Verification_BadgeTest extends WP_UnitTestCase {
 		$result = Verification_Badge::maybe_append_badge( '<p>Content</p>' );
 		$this->assertStringContainsString( 'Signed ', $result );
 		$this->assertStringContainsString( 'c2pa-badge__date', $result );
+	}
+
+	/**
+	 * Test that render_provenance_data outputs the canonical signed bytes.
+	 *
+	 * @since 0.7.0
+	 */
+	public function test_render_provenance_data_outputs_script_tag(): void {
+		$post_id  = $this->factory->post->create( array( 'post_status' => 'publish' ) );
+		$embedded = "Signed content.\xEF\xBB\xBF\xEF\xB8\x80";
+		update_post_meta( $post_id, '_c2pa_status', 'signed' );
+		update_post_meta( $post_id, '_c2pa_embedded_content', $embedded );
+
+		$this->go_to( get_permalink( $post_id ) );
+
+		ob_start();
+		Verification_Badge::render_provenance_data();
+		$result = ob_get_clean();
+
+		$this->assertStringContainsString( 'type="application/c2pa-provenance"', $result );
+		$this->assertStringContainsString( $embedded, $result );
 	}
 }

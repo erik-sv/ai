@@ -67,11 +67,11 @@ class Content_Provenance extends Abstract_Feature {
 	 * @since x.x.x
 	 */
 	public function register(): void {
-		// Sign on first publication.
-		add_action( 'publish_post', array( $this, 'sign_on_publish' ), 20, 2 );
-
-		// Re-sign when content is updated.
-		add_action( 'post_updated', array( $this, 'sign_on_update' ), 20, 3 );
+		// Sign or re-sign after every post save completes. wp_after_insert_post
+		// fires once per save, after ALL other hooks (publish_post, post_updated,
+		// transition_post_status) have run, preventing double-signing when both
+		// publish_post and post_updated fire for the same edit.
+		add_action( 'wp_after_insert_post', array( $this, 'sign_after_save' ), 20, 3 );
 
 		// Register c2pa/sign and c2pa/verify abilities.
 		add_action( 'wp_abilities_api_init', array( $this, 'register_abilities' ) );
@@ -372,17 +372,23 @@ class Content_Provenance extends Abstract_Feature {
 	}
 
 	/**
-	 * Signs a post on first publication if auto-sign is enabled.
+	 * Signs or re-signs a post after a save completes.
 	 *
-	 * Hooked to 'publish_post' at priority 20 so it runs after standard WP
-	 * publish routines. Skips revisions and auto-drafts.
+	 * Hooked to 'wp_after_insert_post' at priority 20. This hook fires once
+	 * per save, after all other save-related hooks (publish_post, post_updated,
+	 * transition_post_status) have finished, preventing double-signing.
+	 *
+	 * First publication uses c2pa.created. Subsequent edits that change the
+	 * content use c2pa.edited with the previous manifest as an ingredient.
+	 * Content-unchanged saves are skipped.
 	 *
 	 * @since x.x.x
 	 *
 	 * @param int      $post_id The post ID.
 	 * @param \WP_Post $post    The post object.
+	 * @param bool     $update  Whether this is an update (true) or new insert (false).
 	 */
-	public function sign_on_publish( int $post_id, \WP_Post $post ): void {
+	public function sign_after_save( int $post_id, \WP_Post $post, bool $update ): void {
 		if ( ! $this->get_signing_option( 'auto_sign' ) ) {
 			return;
 		}
@@ -391,50 +397,29 @@ class Content_Provenance extends Abstract_Feature {
 			return;
 		}
 
-		if ( 'auto-draft' === $post->post_status ) {
+		if ( 'publish' !== $post->post_status ) {
 			return;
 		}
+
+		$stripped     = wp_strip_all_tags( $post->post_content );
+		$stripped     = (string) preg_replace( '/\n{3,}/', "\n\n", $stripped );
+		$current_hash = md5( trim( $stripped ) );
+		$stored_hash  = get_post_meta( $post_id, '_c2pa_content_hash', true );
+		$is_signed    = 'signed' === get_post_meta( $post_id, '_c2pa_status', true );
 
 		// Skip if already signed and content unchanged since last signature.
-		// Prevents phantom re-signing when the block editor autosaves or
-		// the REST API re-saves an already-published post.
-		if ( 'signed' === get_post_meta( $post_id, '_c2pa_status', true ) ) {
-			$stored_hash  = get_post_meta( $post_id, '_c2pa_content_hash', true );
-			$current_hash = md5( wp_strip_all_tags( $post->post_content ) );
-			if ( $stored_hash === $current_hash ) {
-				return;
-			}
-		}
-
-		$this->sign_post( $post_id, $post, 'c2pa.created' );
-	}
-
-	/**
-	 * Re-signs a post when its content changes after initial publication.
-	 *
-	 * Hooked to 'post_updated' at priority 20. Skips non-published posts and
-	 * updates that do not change the post content, to avoid churning signatures.
-	 *
-	 * @since x.x.x
-	 *
-	 * @param int      $post_id     The post ID.
-	 * @param \WP_Post $post_after  The post object after the update.
-	 * @param \WP_Post $post_before The post object before the update.
-	 */
-	public function sign_on_update( int $post_id, \WP_Post $post_after, \WP_Post $post_before ): void {
-		if ( ! $this->get_signing_option( 'auto_sign' ) ) {
+		if ( $is_signed && $stored_hash === $current_hash ) {
 			return;
 		}
 
-		if ( 'publish' !== $post_after->post_status ) {
+		// First signature or content change after a failed signing attempt.
+		if ( ! $is_signed || ! $stored_hash ) {
+			$this->sign_post( $post_id, $post, 'c2pa.created' );
 			return;
 		}
 
-		if ( $post_after->post_content === $post_before->post_content ) {
-			return;
-		}
-
-		$this->sign_post( $post_id, $post_after, 'c2pa.edited', $post_before );
+		// Content changed on a previously signed post: re-sign with ingredient.
+		$this->sign_post( $post_id, $post, 'c2pa.edited' );
 	}
 
 	/**
@@ -455,6 +440,11 @@ class Content_Provenance extends Abstract_Feature {
 	 */
 	public function sign_post( int $post_id, \WP_Post $post, string $action, ?\WP_Post $previous = null ): bool {
 		$plain_text = wp_strip_all_tags( $post->post_content );
+		// Collapse excessive blank lines left by Gutenberg block comment
+		// stripping (<!-- wp:paragraph --> etc.) to a single blank line.
+		// This gives clean paragraph spacing with white-space:pre-line.
+		$plain_text = (string) preg_replace( '/\n{3,}/', "\n\n", $plain_text );
+		$plain_text = trim( $plain_text );
 
 		if ( empty( $plain_text ) ) {
 			return false;
@@ -554,10 +544,15 @@ class Content_Provenance extends Abstract_Feature {
 				'callback'            => array( $this, 'rest_verify_callback' ),
 				'permission_callback' => '__return_true',
 				'args'                => array(
-					'text' => array(
-						'required'          => true,
+					'text'    => array(
+						'required'          => false,
 						'type'              => 'string',
 						'sanitize_callback' => 'wp_kses_post',
+					),
+					'post_id' => array(
+						'required'          => false,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
 					),
 				),
 			)
@@ -569,6 +564,25 @@ class Content_Provenance extends Abstract_Feature {
 			array(
 				'methods'             => 'GET',
 				'callback'            => array( $this, 'rest_status_callback' ),
+				'permission_callback' => static function ( \WP_REST_Request $request ) {
+					return current_user_can( 'edit_post', (int) $request->get_param( 'post_id' ) );
+				},
+				'args'                => array(
+					'post_id' => array(
+						'required'          => true,
+						'type'              => 'integer',
+						'sanitize_callback' => 'absint',
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			'c2pa-provenance/v1',
+			'/embedded-content',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'rest_embedded_content_callback' ),
 				'permission_callback' => static function ( \WP_REST_Request $request ) {
 					return current_user_can( 'edit_post', (int) $request->get_param( 'post_id' ) );
 				},
@@ -596,7 +610,31 @@ class Content_Provenance extends Abstract_Feature {
 	 * @return \WP_REST_Response
 	 */
 	public function rest_verify_callback( \WP_REST_Request $request ): \WP_REST_Response {
-		$text   = (string) $request->get_param( 'text' );
+		$post_id = $request->get_param( 'post_id' );
+		$text    = $request->get_param( 'text' );
+
+		// Prefer post_id: read the canonical signed bytes from meta.
+		// This avoids the lossy innerText/wpautop extraction path.
+		if ( $post_id ) {
+			$embedded = get_post_meta( (int) $post_id, '_c2pa_embedded_content', true );
+			if ( $embedded ) {
+				$text = (string) $embedded;
+			}
+		}
+
+		if ( ! $text ) {
+			return new \WP_REST_Response(
+				array(
+					'verified'    => false,
+					'status'      => 'error',
+					'manifest'    => null,
+					'signed_at'   => null,
+					'signer_tier' => null,
+				),
+				400
+			);
+		}
+
 		$result = C2PA_Manifest_Builder::extract_and_verify( $text );
 
 		$manifest    = $result['manifest'];
@@ -616,6 +654,36 @@ class Content_Provenance extends Abstract_Feature {
 				'signed_at'   => $signed_at,
 				'signer_tier' => $signer_tier,
 			),
+			200
+		);
+	}
+
+	/**
+	 * REST callback: return the canonical signed bytes for a post.
+	 *
+	 * Returns the _c2pa_embedded_content meta value, which is the exact
+	 * NFC-normalized plain text plus the invisible wrapper as stored at
+	 * signing time. Client-side verification tools can use this instead
+	 * of lossy innerText extraction.
+	 *
+	 * @since x.x.x
+	 *
+	 * @param \WP_REST_Request $request The REST request object.
+	 * @return \WP_REST_Response
+	 */
+	public function rest_embedded_content_callback( \WP_REST_Request $request ): \WP_REST_Response {
+		$post_id  = (int) $request->get_param( 'post_id' );
+		$embedded = get_post_meta( $post_id, '_c2pa_embedded_content', true );
+
+		if ( ! $embedded ) {
+			return new \WP_REST_Response(
+				array( 'text' => null ),
+				404
+			);
+		}
+
+		return new \WP_REST_Response(
+			array( 'text' => (string) $embedded ),
 			200
 		);
 	}

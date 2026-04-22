@@ -14,7 +14,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Renders an optional "Click to Verify" badge on published posts.
+ * Handles C2PA provenance embedding injection and optional verification badge.
+ *
+ * Signed content is injected at priority 1, replacing WordPress HTML with the
+ * exact NFC(plain_text) + wrapper bytes that were signed. wpautop is removed
+ * so the byte stream is not modified. A wrapping div with white-space:pre-line
+ * preserves paragraph formatting visually.
+ *
+ * The badge appends at PHP_INT_MAX (after the wrapper) inside the_content so
+ * it inherits the theme's content-area alignment.
  *
  * @since x.x.x
  */
@@ -51,30 +59,35 @@ class Verification_Badge {
 	}
 
 	/**
-	 * Register the frontend badge and embedding injection filters.
+	 * Register the frontend embedding injection and badge hooks.
 	 *
 	 * @since x.x.x
 	 */
 	public static function register_hooks(): void {
-		// Inject invisible Unicode embeddings at priority 1 so the final HTML
-		// served to browsers carries C2PA provenance markers (surviving
-		// copy-paste). post_content in the DB stays clean so other plugins
-		// reading it directly (e.g., AI features) don't ingest invisible chars.
+		// Replace content with the signed embedded bytes at priority 1.
+		// Also removes wpautop so the byte stream stays intact.
 		add_filter( 'the_content', array( self::class, 'inject_c2pa_embeddings' ), 1 );
-		add_filter( 'the_content', array( self::class, 'maybe_append_badge' ), 99 );
+
+		// Append badge at the very end, after the wrapper.
+		// Inside the_content so the theme's content container provides alignment.
+		add_filter( 'the_content', array( self::class, 'maybe_append_badge' ), PHP_INT_MAX );
+
+		// Expose canonical signed bytes for client-side verification tools.
+		add_action( 'wp_footer', array( self::class, 'render_provenance_data' ) );
 	}
 
 	/**
-	 * Inject invisible Unicode C2PA embeddings into published content.
+	 * Inject the signed embedded content, suppressing wpautop.
 	 *
-	 * Reads the embedded content (with provenance markers) from post meta
-	 * and replaces the clean post_content so the final HTML served to
-	 * browsers carries the markers.
+	 * Replaces the WordPress-formatted HTML with the exact bytes that were
+	 * signed: NFC(plain_text) + invisible wrapper. Removes wpautop so the
+	 * byte stream is not modified by paragraph wrapping. A containing div
+	 * with white-space:pre-line preserves visual paragraph formatting.
 	 *
 	 * @since x.x.x
 	 *
 	 * @param string $content Clean post content.
-	 * @return string Content with invisible Unicode markers injected.
+	 * @return string Signed content with invisible Unicode markers.
 	 */
 	public static function inject_c2pa_embeddings( string $content ): string {
 		if ( ! is_singular() || is_admin() ) {
@@ -96,11 +109,63 @@ class Verification_Badge {
 			return $content;
 		}
 
-		return $embedded_content;
+		// Prevent wpautop from wrapping the signed text in <p> tags.
+		// The signed content hash covers the raw plain text bytes; any HTML
+		// injection by wpautop shifts byte offsets and breaks verification.
+		remove_filter( 'the_content', 'wpautop' );
+
+		// Wrap in a div with pre-line whitespace so double newlines display
+		// as paragraph breaks. The div tags are outside the signed bytes;
+		// innerText extraction strips them, leaving the exact signed text.
+		return '<div class="c2pa-signed-content" style="white-space: pre-line;">'
+			. $embedded_content
+			. '</div>';
+	}
+
+	/**
+	 * Output a script tag containing the canonical signed bytes.
+	 *
+	 * The script tag uses type="application/c2pa-provenance" so browsers
+	 * do not execute it. Client-side verification widgets and browser
+	 * extensions can read the exact signed bytes without relying on
+	 * innerText extraction.
+	 *
+	 * @since x.x.x
+	 */
+	public static function render_provenance_data(): void {
+		if ( ! is_singular() || is_admin() ) {
+			return;
+		}
+
+		$post_id = get_the_ID();
+		if ( ! $post_id ) {
+			return;
+		}
+
+		$status = get_post_meta( $post_id, '_c2pa_status', true );
+		if ( 'signed' !== $status ) {
+			return;
+		}
+
+		$embedded_content = get_post_meta( $post_id, '_c2pa_embedded_content', true );
+		if ( empty( $embedded_content ) ) {
+			return;
+		}
+
+		// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Signed C2PA bytes contain invisible Unicode markers; escaping alters the byte stream and breaks cryptographic verification.
+		printf(
+			'<script type="application/c2pa-provenance" data-post-id="%d">%s</script>',
+			absint( $post_id ),
+			$embedded_content
+		);
+		// phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 
 	/**
 	 * Append the C2PA badge to singular published posts if the post is signed.
+	 *
+	 * Runs at PHP_INT_MAX so the badge HTML appears after the invisible wrapper
+	 * in the DOM. The theme's content container provides horizontal alignment.
 	 *
 	 * @since x.x.x
 	 *

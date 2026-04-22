@@ -1,8 +1,5 @@
 import { registerPlugin } from '@wordpress/plugins';
-import {
-	PluginDocumentSettingPanel,
-	store as editorStore,
-} from '@wordpress/editor';
+import { PluginDocumentSettingPanel } from '@wordpress/editor';
 import { Button, Spinner, Notice } from '@wordpress/components';
 import { useState, useEffect, useCallback } from '@wordpress/element';
 import { useSelect } from '@wordpress/data';
@@ -127,11 +124,8 @@ const TrustTierNotice = ( { tier, status } ) => {
 // ── Main panel ───────────────────────────────────────────────────────────────
 
 const ContentProvenancePanel = () => {
-	const { postId, postContent } = useSelect(
-		( select ) => ( {
-			postId: select( 'core/editor' ).getCurrentPostId(),
-			postContent: select( editorStore ).getEditedPostContent(),
-		} ),
+	const postId = useSelect(
+		( select ) => select( 'core/editor' ).getCurrentPostId(),
 		[]
 	);
 
@@ -192,7 +186,7 @@ const ContentProvenancePanel = () => {
 		}
 		setIsVerifying( true );
 		setVerifyResult( null );
-		runAbility( 'c2pa/verify', { text: postContent } )
+		runAbility( 'c2pa/verify', { post_id: postId } )
 			.then( ( res ) => {
 				setVerifyResult( res );
 				setIsVerifying( false );

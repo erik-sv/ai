@@ -242,16 +242,15 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test auto-sign on publish hooks are registered.
+	 * Test auto-sign hook is registered on wp_after_insert_post.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_register_hooks_on_publish_post(): void {
+	public function test_register_hooks_on_after_insert_post(): void {
 		$experiment = new Content_Provenance();
 		$experiment->register();
 
-		$this->assertGreaterThan( 0, has_action( 'publish_post', array( $experiment, 'sign_on_publish' ) ) );
-		$this->assertGreaterThan( 0, has_action( 'post_updated', array( $experiment, 'sign_on_update' ) ) );
+		$this->assertGreaterThan( 0, has_action( 'wp_after_insert_post', array( $experiment, 'sign_after_save' ) ) );
 	}
 
 	/**
@@ -317,34 +316,35 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test sign_on_publish skips auto-drafts.
+	 * Test sign_after_save skips non-published posts.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_sign_on_publish_skips_auto_draft(): void {
+	public function test_sign_after_save_skips_draft(): void {
 		update_option( 'wpai_feature_content-provenance_field_auto_sign', true );
 
 		$post_id = $this->factory->post->create(
 			array(
-				'post_status'  => 'auto-draft',
+				'post_status'  => 'draft',
 				'post_content' => 'Some content.',
 			)
 		);
 		$post    = get_post( $post_id );
 
 		$experiment = new Content_Provenance();
-		$experiment->sign_on_publish( $post_id, $post );
+		$experiment->sign_after_save( $post_id, $post, false );
 
 		$this->assertEmpty( get_post_meta( $post_id, '_c2pa_status', true ) );
+
+		delete_option( 'wpai_feature_content-provenance_field_auto_sign' );
 	}
 
 	/**
-	 * Test sign_on_publish skips when auto_sign is disabled.
+	 * Test sign_after_save skips when auto_sign is disabled.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_sign_on_publish_skips_when_auto_sign_disabled(): void {
-		// The option name follows the pattern: wpai_feature_{id}_field_{name}.
+	public function test_sign_after_save_skips_when_auto_sign_disabled(): void {
 		update_option( 'wpai_feature_content-provenance_field_auto_sign', false );
 
 		$post_id = $this->factory->post->create(
@@ -356,7 +356,7 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 		$post    = get_post( $post_id );
 
 		$experiment = new Content_Provenance();
-		$experiment->sign_on_publish( $post_id, $post );
+		$experiment->sign_after_save( $post_id, $post, false );
 
 		$this->assertEmpty( get_post_meta( $post_id, '_c2pa_status', true ) );
 
@@ -364,53 +364,33 @@ class Content_ProvenanceTest extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test sign_on_update skips when content has not changed.
+	 * Test sign_after_save skips when already signed and content unchanged.
 	 *
 	 * @since 0.5.0
 	 */
-	public function test_sign_on_update_skips_unchanged_content(): void {
+	public function test_sign_after_save_skips_unchanged_content(): void {
 		update_option( 'wpai_feature_content-provenance_field_auto_sign', true );
 
-		$post_id     = $this->factory->post->create(
+		$post_id = $this->factory->post->create(
 			array(
 				'post_status'  => 'publish',
 				'post_content' => 'Identical content.',
 			)
 		);
-		$post_after  = get_post( $post_id );
-		$post_before = clone $post_after;
+		$post    = get_post( $post_id );
+
+		// Simulate a prior signing by setting the meta values.
+		update_post_meta( $post_id, '_c2pa_status', 'signed' );
+		update_post_meta( $post_id, '_c2pa_content_hash', md5( wp_strip_all_tags( $post->post_content ) ) );
 
 		$experiment = new Content_Provenance();
-		$experiment->sign_on_update( $post_id, $post_after, $post_before );
+		$experiment->sign_after_save( $post_id, $post, true );
 
-		$this->assertEmpty( get_post_meta( $post_id, '_c2pa_status', true ) );
-
-		delete_option( 'wpai_feature_content-provenance_field_auto_sign' );
-	}
-
-	/**
-	 * Test sign_on_update skips non-published posts.
-	 *
-	 * @since 0.5.0
-	 */
-	public function test_sign_on_update_skips_non_published(): void {
-		update_option( 'wpai_feature_content-provenance_field_auto_sign', true );
-
-		$post_id     = $this->factory->post->create(
-			array(
-				'post_status'  => 'draft',
-				'post_content' => 'Before.',
-			)
+		// The content hash should remain unchanged (no re-signing).
+		$this->assertSame(
+			md5( wp_strip_all_tags( $post->post_content ) ),
+			get_post_meta( $post_id, '_c2pa_content_hash', true )
 		);
-		$post_before = get_post( $post_id );
-		$post_after  = clone $post_before;
-
-		$post_after->post_content = 'After.';
-
-		$experiment = new Content_Provenance();
-		$experiment->sign_on_update( $post_id, $post_after, $post_before );
-
-		$this->assertEmpty( get_post_meta( $post_id, '_c2pa_status', true ) );
 
 		delete_option( 'wpai_feature_content-provenance_field_auto_sign' );
 	}
