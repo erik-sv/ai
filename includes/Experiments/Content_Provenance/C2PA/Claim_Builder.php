@@ -42,7 +42,7 @@ final class Claim_Builder {
 	 *
 	 * @var string
 	 */
-	public const ASSERTION_SOFT_BINDING = 'c2pa.soft_binding';
+	public const ASSERTION_SOFT_BINDING = 'c2pa.soft-binding';
 
 	/**
 	 * C2PA assertion label for ingredient reference (v3 per C2PA 2.4).
@@ -249,7 +249,7 @@ final class Claim_Builder {
 	}
 
 	/**
-	 * Builds the c2pa.soft_binding assertion for text embedding (Section A.7).
+	 * Builds the c2pa.soft-binding assertion for text embedding (Section A.7).
 	 *
 	 * Per the C2PA 2.4 soft-binding-map CDDL, required fields are `alg`
 	 * (binding algorithm) and `blocks` (array of soft-binding-block-map).
