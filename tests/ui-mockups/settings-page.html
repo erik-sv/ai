@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Content Provenance Settings - Mock</title>
+<!-- WordPress admin CSS approximation -->
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #1d2327;
+    background: #f0f0f1;
+    margin: 0;
+    padding: 0;
+  }
+  #wpcontent {
+    padding: 20px;
+    max-width: 900px;
+  }
+  h2 { font-size: 1.3em; font-weight: 600; margin: 1em 0 0.5em; }
+  h4 { font-size: 1em; font-weight: 600; margin: 1.33em 0 0.5em; }
+  .description { color: #646970; font-style: italic; }
+  .form-table { border-collapse: collapse; width: 100%; margin-top: 0.5em; clear: both; }
+  .form-table th { vertical-align: top; text-align: left; padding: 15px 10px 15px 0; width: 200px; font-weight: 600; }
+  .form-table td { vertical-align: top; padding: 10px; }
+  .form-table td p.description { margin-top: 4px; }
+  select, input[type="url"], input[type="text"], input[type="password"] {
+    font-size: 13px; padding: 4px 8px; border: 1px solid #8c8f94; border-radius: 4px; min-height: 30px;
+  }
+  .regular-text { width: 25em; }
+  .large-text { width: 35em; }
+  input[type="checkbox"] { margin-right: 6px; }
+  label { cursor: pointer; }
+  fieldset { border: none; margin: 0; padding: 0; }
+  .screen-reader-text { position: absolute; clip: rect(1px,1px,1px,1px); overflow: hidden; height: 1px; width: 1px; }
+
+  /* Our tier section styles */
+  .c2pa-tier-section {
+    margin-left: 24px;
+    padding-left: 24px;
+    border-left: 4px solid #c3c4c7;
+  }
+  .c2pa-tier-section .form-table th {
+    width: 140px;
+    padding-left: 0;
+  }
+</style>
+</head>
+<body>
+<div id="wpcontent">
+  <h2>Content Provenance</h2>
+
+  <fieldset class="ai-experiment-content-provenance-settings">
+    <legend class="screen-reader-text">Content Provenance Settings</legend>
+
+    <p class="description">
+      Choose how content is signed. Local signing requires no external services and uses a key stored in the database. Connected signing delegates to an external key-management service for a fuller trust chain. Bring-Your-Own-Key (BYOK) lets you supply your own CA-backed private key.
+    </p>
+
+    <table class="form-table" role="presentation">
+      <tr>
+        <th scope="row"><label for="signing_tier">Signing Tier</label></th>
+        <td>
+          <select id="signing_tier" name="signing_tier">
+            <option value="local">Local &mdash; self-signed, zero config</option>
+            <option value="connected" selected>Connected &mdash; CA-verified provider</option>
+            <option value="byok">BYOK &mdash; your own CA-issued certificate</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+
+    <div class="c2pa-tier-section c2pa-tier-connected">
+      <h4>Connected Service Configuration</h4>
+      <p class="description">
+        Connected signing uses a CA-verified certificate from a signing service. Manifests are trusted by standard C2PA verifiers like Content Credentials.
+      </p>
+      <table class="form-table" role="presentation">
+        <tr>
+          <th scope="row"><label for="service_url">Service URL</label></th>
+          <td>
+            <input type="url" id="service_url" name="service_url" value="https://api.example.com/v1/sign" class="regular-text" placeholder="https://api.example.com/v1/sign" />
+            <p class="description">Signing endpoint for your CA-verified provider. Pre-configured with a default; update to match your provider.</p>
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><label for="api_key">API Key</label></th>
+          <td>
+            <input type="password" id="api_key" name="api_key" value="" class="regular-text" autocomplete="new-password" placeholder="Enter API key" />
+            <p class="description">API key from your CA-verified signing provider. Known compatible providers: Encypher.</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="c2pa-tier-section c2pa-tier-byok" style="display:none">
+      <h4>BYOK Certificate Configuration</h4>
+      <p class="description">
+        Supply your own CA-issued EC P-256 private key and X.509 certificate for the highest trust level.
+      </p>
+      <table class="form-table" role="presentation">
+        <tr>
+          <th scope="row"><label for="byok_key">Private Key Path</label></th>
+          <td>
+            <input type="text" id="byok_key" name="byok_key" class="large-text" placeholder="/etc/ssl/private/c2pa-signing-key.pem" />
+            <p class="description">Filesystem path to PEM-encoded EC P-256 private key.</p>
+          </td>
+        </tr>
+        <tr>
+          <th scope="row"><label for="byok_cert">Certificate Path</label></th>
+          <td>
+            <input type="text" id="byok_cert" name="byok_cert" class="large-text" placeholder="/etc/ssl/certs/c2pa-signing-cert.pem" />
+            <p class="description">Filesystem path to PEM-encoded X.509 certificate (or chain).</p>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <h4>Publishing Options</h4>
+    <table class="form-table" role="presentation">
+      <tr>
+        <th scope="row">Auto-sign</th>
+        <td><label><input type="checkbox" checked /> Automatically sign content on publish and update</label></td>
+      </tr>
+      <tr>
+        <th scope="row">Provenance Badge</th>
+        <td><label><input type="checkbox" checked /> Show provenance badge on signed content</label></td>
+      </tr>
+      <tr>
+        <th scope="row"><label for="badge_pos">Badge Position</label></th>
+        <td>
+          <select id="badge_pos" name="badge_pos">
+            <option value="below" selected>Below content</option>
+            <option value="above">Above content</option>
+            <option value="inline">Inline (end of content)</option>
+          </select>
+        </td>
+      </tr>
+    </table>
+  </fieldset>
+
+  <script>
+    var select = document.getElementById('signing_tier');
+    select.addEventListener('change', function() {
+      var sections = document.querySelectorAll('.c2pa-tier-section');
+      for (var i = 0; i < sections.length; i++) {
+        sections[i].style.display = 'none';
+      }
+      var target = document.querySelector('.c2pa-tier-' + select.value);
+      if (target) { target.style.display = ''; }
+    });
+  </script>
+</div>
+</body>
+</html>
